@@ -28,7 +28,7 @@ jobs:
           echo $PATH
       # Set up caching for conda env so that the workflow runs quickly after the first time
       - name: Setup Conda Caching
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/conda_pkgs_dir
           key: conda-macos-3-9-${{ hashFiles('build/conda/conda-3-9-env.yaml') }}

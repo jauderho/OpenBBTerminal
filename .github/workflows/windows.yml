@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup caching for conda packages
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/conda_pkgs_dir
           key: conda-windows-3-9-${{ hashFiles('build/conda/conda-3-9-env.yaml') }}
@@ -70,7 +70,7 @@ jobs:
           echo "::set-output name=dir::$(pip cache dir)"
 
       - name: pip cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: windows-3-9-pip-${{ hashFiles('requirements-full.txt') }}
