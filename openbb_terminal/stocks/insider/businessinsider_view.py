@@ -32,7 +32,7 @@ register_matplotlib_converters()
 def insider_activity(
     data: pd.DataFrame,
     symbol: str,
-    start_date: str = (datetime.now() - timedelta(days=1100)).strftime("%Y-%m-%d"),
+    start_date: str = None,
     interval: str = "1440min",
     limit: int = 10,
     raw: bool = False,
@@ -48,7 +48,7 @@ def insider_activity(
     symbol: str
         Due diligence ticker symbol
     start_date: str
-        Start date of the stock data
+        Initial date (e.g., 2021-10-01). Defaults to 3 years back
     interval: str
         Stock data interval
     limit: int
@@ -60,6 +60,10 @@ def insider_activity(
     external_axes: Optional[List[plt.Axes]], optional
         External axes (1 axis is expected in the list), by default None
     """
+
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=1100)).strftime("%Y-%m-%d")
+
     df_ins = businessinsider_model.get_insider_activity(symbol)
 
     if df_ins.empty:
@@ -112,11 +116,11 @@ def insider_activity(
             shares_range = (
                 df_insider[df_insider["Type"] == "Buy"]
                 .groupby(by=["Date"])
-                .sum()["Trade"]
+                .sum(numeric_only=True)["Trade"]
                 .max()
                 - df_insider[df_insider["Type"] == "Sell"]
                 .groupby(by=["Date"])
-                .sum()["Trade"]
+                .sum(numeric_only=True)["Trade"]
                 .min()
             )
             n_proportion = price_range / shares_range
@@ -124,7 +128,7 @@ def insider_activity(
             for ind in (
                 df_insider[df_insider["Type"] == "Sell"]
                 .groupby(by=["Date"])
-                .sum()
+                .sum(numeric_only=True)
                 .index
             ):
                 if ind in data.index:
@@ -145,7 +149,7 @@ def insider_activity(
                     * float(
                         df_insider[df_insider["Type"] == "Sell"]
                         .groupby(by=["Date"])
-                        .sum()["Trade"][ind]
+                        .sum(numeric_only=True)["Trade"][ind]
                     ),
                     ymax=n_stock_price,
                     colors=theme.down_color,
@@ -154,7 +158,10 @@ def insider_activity(
                 )
 
             for ind in (
-                df_insider[df_insider["Type"] == "Buy"].groupby(by=["Date"]).sum().index
+                df_insider[df_insider["Type"] == "Buy"]
+                .groupby(by=["Date"])
+                .sum(numeric_only=True)
+                .index
             ):
                 if ind in data.index:
                     ind_dt = ind
@@ -175,7 +182,7 @@ def insider_activity(
                     * float(
                         df_insider[df_insider["Type"] == "Buy"]
                         .groupby(by=["Date"])
-                        .sum()["Trade"][ind]
+                        .sum(numeric_only=True)["Trade"][ind]
                     ),
                     colors=theme.up_color,
                     ls="-",

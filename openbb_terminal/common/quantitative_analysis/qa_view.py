@@ -27,7 +27,6 @@ from openbb_terminal.config_terminal import theme
 from openbb_terminal.common.quantitative_analysis import qa_model
 from openbb_terminal.config_plot import PLOT_DPI
 from openbb_terminal.decorators import log_start_end
-from openbb_terminal.helper_classes import LineAnnotateDrawer
 from openbb_terminal.helper_funcs import (
     export_data,
     plot_autoscale,
@@ -395,7 +394,9 @@ def display_acf(
     sm.graphics.tsa.plot_acf(np.diff(np.diff(data.values)), lags=lags, ax=ax1)
     ax1.set_title(f"{symbol} Returns Auto-Correlation", fontsize=9)
     # Diff Partial auto - correlation function for original time series
-    sm.graphics.tsa.plot_pacf(np.diff(np.diff(data.values)), lags=lags, ax=ax2)
+    sm.graphics.tsa.plot_pacf(
+        np.diff(np.diff(data.values)), lags=lags, ax=ax2, method="ywm"
+    )
     ax2.set_title(
         f"{symbol} Returns Partial Auto-Correlation",
         fontsize=9,
@@ -408,7 +409,9 @@ def display_acf(
         fontsize=9,
     )
     # Diff Diff Partial auto-correlation function for original time series
-    sm.graphics.tsa.plot_pacf(np.diff(np.diff(data.values)), lags=lags, ax=ax4)
+    sm.graphics.tsa.plot_pacf(
+        np.diff(np.diff(data.values)), lags=lags, ax=ax4, method="ywm"
+    )
     ax4.set_title(
         f"Change in {symbol} Returns Partial Auto-Correlation",
         fontsize=9,
@@ -841,7 +844,7 @@ def display_unitroot(
 def display_raw(
     data: pd.DataFrame,
     sortby: str = "",
-    descend: bool = False,
+    ascend: bool = False,
     limit: int = 20,
     export: str = "",
 ) -> None:
@@ -853,7 +856,7 @@ def display_raw(
         DataFrame with historical information
     sortby : str
         The column to sort by
-    descend : bool
+    ascend : bool
         Whether to sort descending
     limit : int
         Number of rows to show
@@ -861,30 +864,37 @@ def display_raw(
         Export data as CSV, JSON, XLSX
     """
 
-    export_data(
-        export,
-        os.path.dirname(os.path.abspath(__file__)),
-        "history",
-        data,
-    )
-
     if isinstance(data, pd.Series):
         df1 = pd.DataFrame(data)
     else:
         df1 = data.copy()
 
     if sortby:
-        df1 = data.sort_values(
-            by=sortby if sortby != "AdjClose" else "Adj Close", ascending=descend
-        )
+        try:
+            sort_col = [x.lower().replace(" ", "") for x in df1.columns].index(
+                sortby.lower().replace(" ", "")
+            )
+        except ValueError:
+            console.print("[red]The provided column is not a valid option[/red]\n")
+            return
+        df1 = df1.sort_values(by=data.columns[sort_col], ascending=ascend)
+    else:
+        df1 = df1.sort_index(ascending=ascend)
     df1.index = [x.strftime("%Y-%m-%d") for x in df1.index]
 
     print_rich_table(
-        df1.head(limit) if sortby else df1.tail(limit),
+        df1.head(limit),
         headers=[x.title() if x != "" else "Date" for x in df1.columns],
         title="[bold]Raw Data[/bold]",
         show_index=True,
         floatfmt=".3f",
+    )
+
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "raw",
+        data,
     )
 
 
@@ -893,7 +903,6 @@ def display_line(
     data: pd.Series,
     title: str = "",
     log_y: bool = True,
-    draw: bool = False,
     markers_lines: Optional[List[datetime]] = None,
     markers_scatter: Optional[List[datetime]] = None,
     export: str = "",
@@ -909,8 +918,6 @@ def display_line(
         Title for plot
     log_y: bool
         Flag for showing y on log scale
-    draw: bool
-        Flag for drawing lines and annotating on the plot
     markers_lines: Optional[List[datetime]]
         List of dates to highlight using vertical lines
     markers_scatter: Optional[List[datetime]]
@@ -983,8 +990,6 @@ def display_line(
 
     if title:
         ax.set_title(title)
-    if draw:
-        LineAnnotateDrawer(ax).draw_lines_and_annotate()
 
     theme.style_primary_axis(ax)
 
@@ -1004,11 +1009,11 @@ def display_var(
     use_mean: bool = False,
     adjusted_var: bool = False,
     student_t: bool = False,
-    percentile: float = 0.999,
+    percentile: float = 99.9,
     data_range: int = 0,
     portfolio: bool = False,
 ) -> None:
-    """Displays VaR of dataframe
+    """Displays VaR of dataframe.
 
     Parameters
     ----------
@@ -1054,7 +1059,7 @@ def display_var(
         show_index=True,
         headers=list(df.columns),
         title=f"[bold]{symbol}{str_title}Value at Risk[/bold]",
-        floatfmt=".4f",
+        floatfmt=".2f",
     )
 
 
@@ -1063,10 +1068,10 @@ def display_es(
     symbol: str = "",
     use_mean: bool = False,
     distribution: str = "normal",
-    percentile: float = 0.999,
+    percentile: float = 99.9,
     portfolio: bool = False,
 ) -> None:
-    """Displays expected shortfall
+    """Displays expected shortfall.
 
     Parameters
     ----------
@@ -1102,7 +1107,7 @@ def display_es(
         show_index=True,
         headers=list(df.columns),
         title=f"[bold]{symbol}{str_title}Expected Shortfall[/bold]",
-        floatfmt=".4f",
+        floatfmt=".2f",
     )
 
 

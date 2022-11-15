@@ -5,13 +5,16 @@ __docformat__ = "numpy"
 import argparse
 import json
 import logging
+import os
+from pathlib import Path
 from typing import List, Dict
 
 # IMPORTATION THIRDPARTY
-from prompt_toolkit.completion import NestedCompleter
 
 # IMPORTATION INTERNAL
 from openbb_terminal import feature_flags as obbff
+from openbb_terminal.core.config.paths import MISCELLANEOUS_DIRECTORY
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
@@ -43,32 +46,41 @@ class SourcesController(BaseController):
         super().__init__(queue)
 
         self.commands_with_sources = dict()
-        with open(obbff.PREFERRED_DATA_SOURCE_FILE) as f:
-            if not f.read():
-                with open("data_sources_default.json") as f2:
-                    self.json_doc = json.load(f2)
-            else:
-                f.seek(0)
-                self.json_doc = json.load(f)
-            for context in self.json_doc:
-                for menu in self.json_doc[context]:
-                    if isinstance(self.json_doc[context][menu], Dict):
-                        for submenu in self.json_doc[context][menu]:
-                            if isinstance(self.json_doc[context][menu][submenu], Dict):
-                                for subsubmenu in self.json_doc[context][menu][submenu]:
-                                    self.commands_with_sources[
-                                        f"{context}_{menu}_{submenu}_{subsubmenu}"
-                                    ] = self.json_doc[context][menu][submenu][
-                                        subsubmenu
-                                    ]
-                            else:
+
+        # Loading in both source files: default sources and user sources
+        default_data_source = MISCELLANEOUS_DIRECTORY / "data_sources_default.json"
+        user_data_source = Path(obbff.PREFERRED_DATA_SOURCE_FILE)
+
+        # Opening default sources file from the repository root
+        with open(str(default_data_source)) as json_file:
+            self.json_doc = json.load(json_file)
+
+        # If the user has added sources to their own sources file in OpenBBUserData, then use that
+        if (
+            not os.getenv("TEST_MODE")
+            and user_data_source.exists()
+            and user_data_source.stat().st_size > 0
+        ):
+            with open(str(user_data_source)) as json_file:
+                self.json_doc = json.load(json_file)
+
+        for context in self.json_doc:
+            for menu in self.json_doc[context]:
+                if isinstance(self.json_doc[context][menu], Dict):
+                    for submenu in self.json_doc[context][menu]:
+                        if isinstance(self.json_doc[context][menu][submenu], Dict):
+                            for subsubmenu in self.json_doc[context][menu][submenu]:
                                 self.commands_with_sources[
-                                    f"{context}_{menu}_{submenu}"
-                                ] = self.json_doc[context][menu][submenu]
-                    else:
-                        self.commands_with_sources[f"{context}_{menu}"] = self.json_doc[
-                            context
-                        ][menu]
+                                    f"{context}_{menu}_{submenu}_{subsubmenu}"
+                                ] = self.json_doc[context][menu][submenu][subsubmenu]
+                        else:
+                            self.commands_with_sources[
+                                f"{context}_{menu}_{submenu}"
+                            ] = self.json_doc[context][menu][submenu]
+                else:
+                    self.commands_with_sources[f"{context}_{menu}"] = self.json_doc[
+                        context
+                    ][menu]
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
@@ -103,6 +115,7 @@ class SourcesController(BaseController):
             action="store",
             dest="cmd",
             choices=list(self.commands_with_sources.keys()),
+            required="-h" not in other_args,
             help="Command that we want to check the available data sources and the default one.",
             metavar="COMMAND",
         )
@@ -110,12 +123,22 @@ class SourcesController(BaseController):
             other_args.insert(0, "-c")
         ns_parser = parse_simple_args(parser, other_args)
         if ns_parser:
-            console.print(
-                f"\n[param]Default   :[/param] {self.commands_with_sources[ns_parser.cmd][0]}"
-            )
-            console.print(
-                f"[param]Available :[/param] {', '.join(self.commands_with_sources[ns_parser.cmd])}\n"
-            )
+            try:
+                the_item = self.commands_with_sources[ns_parser.cmd]
+            except KeyError:
+                console.print(
+                    [f"[red]'{ns_parser.cmd}' is not a valid command.[/red]\n"]
+                )
+                return
+            if the_item:
+                console.print(
+                    f"\n[param]Default   :[/param] {self.commands_with_sources[ns_parser.cmd][0]}"
+                )
+                console.print(
+                    f"[param]Available :[/param] {', '.join(self.commands_with_sources[ns_parser.cmd])}\n"
+                )
+            else:
+                console.print("This command has no data sources available.\n")
 
     # pylint: disable=R0912
     @log_start_end(log=logger)

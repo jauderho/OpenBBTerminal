@@ -6,11 +6,13 @@ import argparse
 import logging
 from datetime import datetime, timedelta
 from typing import List
-from prompt_toolkit.completion import NestedCompleter
+
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal.cryptocurrency import cryptocurrency_helpers
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.cryptocurrency.overview import cryptopanic_model
+from openbb_terminal.cryptocurrency.due_diligence import tokenterminal_model
 from openbb_terminal.cryptocurrency.due_diligence import (
     binance_model,
     binance_view,
@@ -28,6 +30,7 @@ from openbb_terminal.cryptocurrency.due_diligence import (
     messari_view,
     santiment_view,
     cryptopanic_view,
+    tokenterminal_view,
 )
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
@@ -65,6 +68,8 @@ class DueDiligenceController(CryptoBaseController):
         "change",
         "nonzero",
         "eb",
+        "funot",
+        "desc",
     ]
 
     SPECIFIC_CHOICES = {
@@ -125,33 +130,87 @@ class DueDiligenceController(CryptoBaseController):
         self.messari_timeseries = []
         df_mt = messari_model.get_available_timeseries()
         self.ccxt_exchanges = ccxt_model.get_exchanges()
+        self.binance_currencies = ccxt_model.get_binance_currencies()
+        self.coinbase_currencies = {"USD", "USDC", "GBP", "USDT", "EUR"}
 
         if not df_mt.empty:
             self.messari_timeseries = df_mt.index.to_list()
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["ob"] = {c: None for c in self.ccxt_exchanges}
-            choices["ob"]["-e"] = {c: None for c in self.ccxt_exchanges}
-            choices["trades"] = {c: None for c in self.ccxt_exchanges}
-            choices["trades"]["-e"] = {c: None for c in self.ccxt_exchanges}
+            choices["ob"] = {c: {} for c in self.ccxt_exchanges}
+            choices["ob"]["-e"] = {c: {} for c in self.ccxt_exchanges}
+            choices["ob"]["--vs"] = {c: {} for c in self.binance_currencies}
+            choices["trades"] = {c: {} for c in self.ccxt_exchanges}
+            choices["trades"]["-e"] = {c: {} for c in self.ccxt_exchanges}
+            choices["trades"]["--vs"] = {c: {} for c in self.binance_currencies}
             choices["active"]["-i"] = {
                 c: None for c in glassnode_model.INTERVALS_ACTIVE_ADDRESSES
             }
             choices["change"] = {
-                c: None for c in glassnode_model.GLASSNODE_SUPPORTED_EXCHANGES
+                c: {} for c in glassnode_model.GLASSNODE_SUPPORTED_EXCHANGES
             }
             choices["eb"] = {
-                c: None for c in glassnode_model.GLASSNODE_SUPPORTED_EXCHANGES
+                c: {} for c in glassnode_model.GLASSNODE_SUPPORTED_EXCHANGES
             }
-            choices["oi"]["-i"] = {c: None for c in coinglass_model.INTERVALS}
-            choices["atl"]["--vs"] = {c: None for c in FILTERS_VS_USD_BTC}
-            choices["ath"]["--vs"] = {c: None for c in FILTERS_VS_USD_BTC}
-            choices["mkt"]["--vs"] = {c: None for c in coinpaprika_view.CURRENCIES}
-            choices["mkt"]["-s"] = {c: None for c in coinpaprika_view.MARKET_FILTERS}
-            choices["ex"]["-s"] = {c: None for c in coinpaprika_view.EX_FILTERS}
-            choices["events"]["-s"] = {c: None for c in coinpaprika_view.EVENTS_FILTERS}
-            choices["twitter"]["-s"] = {
-                c: None for c in coinpaprika_view.TWEETS_FILTERS
+            choices["eb"]["--since"] = None
+            choices["eb"]["-s"] = None
+            choices["eb"]["--until"] = None
+            choices["eb"]["-u"] = None
+            choices["eb"]["--pct"] = {}
+            choices["eb"]["-p"] = {}
+            choices["oi"]["--interval"] = {c: {} for c in coinglass_model.INTERVALS}
+            choices["oi"]["-i"] = "--interval"
+            choices["stats"]["--vs"] = {c: {} for c in self.coinbase_currencies}
+            choices["atl"]["--vs"] = {c: {} for c in FILTERS_VS_USD_BTC}
+            choices["ath"]["--vs"] = {c: {} for c in FILTERS_VS_USD_BTC}
+            choices["mkt"] = {
+                "--vs": {c: {} for c in coinpaprika_view.CURRENCIES},
+                "--sort": {c: {} for c in coinpaprika_view.MARKET_FILTERS},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+                "--urls": {},
+                "-u": "--urls",
+            }
+            choices["ex"] = {
+                "--sort": {c: {} for c in coinpaprika_view.EX_FILTERS},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+            }
+            choices["events"] = {
+                "--sort": {c: {} for c in coinpaprika_view.EVENTS_FILTERS},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+            }
+            choices["twitter"] = {
+                "--sort": {c: {} for c in coinpaprika_view.TWEETS_FILTERS},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+            }
+            choices["news"] = {
+                "--sort": {c: {} for c in cryptopanic_model.SORT_FILTERS},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "--urls": {},
+                "-u": "--urls",
+                "--kind": {c: {} for c in cryptopanic_model.CATEGORIES},
+                "-k": "--kind",
+                "--filter": {c: {} for c in cryptopanic_model.FILTERS},
+                "--region": {c: {} for c in cryptopanic_model.REGIONS},
+                "-r": "--region",
             }
             choices["mt"] = {c: None for c in self.messari_timeseries}
             choices["mt"]["-i"] = {c: None for c in messari_model.INTERVALS_TIMESERIES}
@@ -163,6 +222,14 @@ class DueDiligenceController(CryptoBaseController):
             choices["news"]["--filter"] = {c: None for c in cryptopanic_model.FILTERS}
             choices["news"]["-r"] = {c: None for c in cryptopanic_model.REGIONS}
             choices["news"]["-s"] = {c: None for c in cryptopanic_model.SORT_FILTERS}
+            choices["funot"]["-m"] = {c: None for c in tokenterminal_model.METRICS}
+            choices["funot"]["-p"] = {
+                c: None for c in tokenterminal_model.get_project_ids()
+            }
+            choices["desc"]["-p"] = {
+                c: None for c in tokenterminal_model.get_project_ids()
+            }
+            choices["desc"] = {c: None for c in tokenterminal_model.get_project_ids()}
 
             choices["support"] = self.SUPPORT_CHOICES
             choices["about"] = self.ABOUT_CHOICES
@@ -175,7 +242,7 @@ class DueDiligenceController(CryptoBaseController):
         mt.add_cmd("load")
         mt.add_raw("\n")
         mt.add_param("_symbol", self.symbol)
-        mt.add_param("_source", "cg" if self.source != "" else "")
+        mt.add_param("_source", self.source)
         mt.add_raw("\n")
 
         mt.add_info("_overview_")
@@ -188,6 +255,7 @@ class DueDiligenceController(CryptoBaseController):
         mt.add_cmd("gov")
         mt.add_cmd("basic")
         mt.add_cmd("stats")
+        mt.add_cmd("desc")
 
         mt.add_info("_market_")
         mt.add_cmd("market")
@@ -208,6 +276,7 @@ class DueDiligenceController(CryptoBaseController):
         mt.add_cmd("ps")
         mt.add_cmd("mcapdom")
         mt.add_cmd("mt")
+        mt.add_cmd("funot")
 
         mt.add_info("_contributors_")
         mt.add_cmd("team")
@@ -276,10 +345,11 @@ class DueDiligenceController(CryptoBaseController):
             )
 
             if ns_parser:
+
                 glassnode_view.display_non_zero_addresses(
                     symbol=self.symbol.upper(),
-                    start_date=int(datetime.timestamp(ns_parser.since)),
-                    end_date=int(datetime.timestamp(ns_parser.until)),
+                    start_date=ns_parser.since.strftime("%Y-%m-%d"),
+                    end_date=ns_parser.until.strftime("%Y-%m-%d"),
                     export=ns_parser.export,
                 )
 
@@ -364,11 +434,12 @@ class DueDiligenceController(CryptoBaseController):
             )
 
             if ns_parser:
+
                 glassnode_view.display_active_addresses(
                     symbol=self.symbol.upper(),
                     interval=ns_parser.interval,
-                    start_date=int(datetime.timestamp(ns_parser.since)),
-                    end_date=int(datetime.timestamp(ns_parser.until)),
+                    start_date=ns_parser.since.strftime("%Y-%m-%d"),
+                    end_date=ns_parser.until.strftime("%Y-%m-%d"),
                     export=ns_parser.export,
                 )
 
@@ -428,11 +499,12 @@ class DueDiligenceController(CryptoBaseController):
             )
 
             if ns_parser:
+
                 glassnode_view.display_exchange_net_position_change(
                     symbol=self.symbol.upper(),
                     exchange=ns_parser.exchange,
-                    start_date=int(datetime.timestamp(ns_parser.since)),
-                    end_date=int(datetime.timestamp(ns_parser.until)),
+                    start_date=ns_parser.since.strftime("%Y-%m-%d"),
+                    end_date=ns_parser.until.strftime("%Y-%m-%d"),
                     export=ns_parser.export,
                 )
         else:
@@ -458,8 +530,9 @@ class DueDiligenceController(CryptoBaseController):
                 "-p",
                 "--pct",
                 dest="percentage",
-                type=bool,
+                action="store_true",
                 help="Show percentage instead of stacked value. Default: False",
+                default=False,
             )
 
             parser.add_argument(
@@ -498,11 +571,12 @@ class DueDiligenceController(CryptoBaseController):
             )
 
             if ns_parser:
+
                 glassnode_view.display_exchange_balances(
                     symbol=self.symbol.upper(),
                     exchange=ns_parser.exchange,
-                    start_date=int(datetime.timestamp(ns_parser.since)),
-                    end_date=int(datetime.timestamp(ns_parser.until)),
+                    start_date=ns_parser.since.strftime("%Y-%m-%d"),
+                    end_date=ns_parser.until.strftime("%Y-%m-%d"),
                     percentage=ns_parser.percentage,
                     export=ns_parser.export,
                 )
@@ -825,9 +899,8 @@ class DueDiligenceController(CryptoBaseController):
             "--vs",
             help="Quote currency (what to view coin vs)",
             dest="vs",
-            type=str.lower,
             default="usdt",
-            choices=["usdt", "usdc", "btc"],
+            type=str.lower,
         )
 
         if other_args and not other_args[0][0] == "-":
@@ -841,7 +914,7 @@ class DueDiligenceController(CryptoBaseController):
             ccxt_view.display_order_book(
                 ns_parser.exchange,
                 symbol=self.symbol,
-                vs=ns_parser.vs,
+                to_symbol=ns_parser.vs,
                 export=ns_parser.export,
             )
 
@@ -869,9 +942,8 @@ class DueDiligenceController(CryptoBaseController):
             "--vs",
             help="Quote currency (what to view coin vs)",
             dest="vs",
-            type=str.lower,
             default="usdt",
-            choices=["usdt", "usdc", "btc"],
+            type=str.lower,
         )
 
         if other_args and not other_args[0][0] == "-":
@@ -885,7 +957,7 @@ class DueDiligenceController(CryptoBaseController):
             ccxt_view.display_trades(
                 ns_parser.exchange,
                 symbol=self.symbol,
-                vs=ns_parser.vs,
+                to_symbol=ns_parser.vs,
                 export=ns_parser.export,
                 limit=ns_parser.limit,
             )
@@ -894,7 +966,11 @@ class DueDiligenceController(CryptoBaseController):
     def call_balance(self, other_args):
         """Process balance command"""
         coin = self.symbol.upper()
-        _, quotes = binance_model.show_available_pairs_for_given_symbol(coin)
+        values = binance_model.show_available_pairs_for_given_symbol(coin)
+        if values:
+            quotes = values[1]
+        else:
+            quotes = None
 
         parser = argparse.ArgumentParser(
             prog="balance",
@@ -918,7 +994,7 @@ class DueDiligenceController(CryptoBaseController):
 
         if ns_parser:
             binance_view.display_balance(
-                to_symbol=coin, from_symbol=ns_parser.vs, export=ns_parser.export
+                from_symbol=coin, to_symbol=ns_parser.vs, export=ns_parser.export
             )
 
     @log_start_end(log=logger)
@@ -981,12 +1057,11 @@ class DueDiligenceController(CryptoBaseController):
             description="""Get all markets found for given coin.
                 You can display only N number of markets with --limt parameter.
                 You can sort data by pct_volume_share, exchange, pair, trust_score, volume, price --sort parameter
-                and also with --descend flag to sort descending.
+                and also with --reverse flag to sort ascending.
                 You can use additional flag --urls to see urls for each market
                 Displays:
                     exchange, pair, trust_score, volume, price, pct_volume_share,""",
         )
-
         parser.add_argument(
             "--vs",
             help="Quoted currency. Default USD",
@@ -995,7 +1070,6 @@ class DueDiligenceController(CryptoBaseController):
             type=str,
             choices=coinpaprika_view.CURRENCIES,
         )
-
         parser.add_argument(
             "-l",
             "--limit",
@@ -1004,7 +1078,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Limit of records",
             type=check_positive,
         )
-
         parser.add_argument(
             "-s",
             "--sort",
@@ -1014,15 +1087,18 @@ class DueDiligenceController(CryptoBaseController):
             default="pct_volume_share",
             choices=coinpaprika_view.MARKET_FILTERS,
         )
-
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         parser.add_argument(
             "-u",
             "--urls",
@@ -1038,11 +1114,11 @@ class DueDiligenceController(CryptoBaseController):
         if ns_parser:
             if self.symbol:
                 coinpaprika_view.display_markets(
-                    symbol=self.symbol,
-                    currency=ns_parser.vs,
+                    from_symbol=self.symbol,
+                    to_symbol=ns_parser.vs,
                     limit=ns_parser.limit,
                     sortby=ns_parser.sortby,
-                    ascend=not ns_parser.descend,
+                    ascend=ns_parser.reverse,
                     links=ns_parser.urls,
                     export=ns_parser.export,
                 )
@@ -1057,11 +1133,10 @@ class DueDiligenceController(CryptoBaseController):
             description="""Get all exchanges found for given coin.
                 You can display only top N number of exchanges with --top parameter.
                 You can sort data by  id, name, adjusted_volume_24h_share, fiats --sort parameter
-                and also with --descend flag to sort descending.
+                and also with --reverse flag to sort ascending.
                 Displays:
                     id, name, adjusted_volume_24h_share, fiats""",
         )
-
         parser.add_argument(
             "-l",
             "--limit",
@@ -1070,7 +1145,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Limit of records",
             type=check_positive,
         )
-
         parser.add_argument(
             "-s",
             "--sort",
@@ -1080,15 +1154,18 @@ class DueDiligenceController(CryptoBaseController):
             default="adjusted_volume_24h_share",
             choices=coinpaprika_view.EX_FILTERS,
         )
-
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
@@ -1098,7 +1175,7 @@ class DueDiligenceController(CryptoBaseController):
                     symbol=self.symbol,
                     limit=ns_parser.limit,
                     sortby=ns_parser.sortby,
-                    ascend=not ns_parser.descend,
+                    ascend=ns_parser.reverse,
                     export=ns_parser.export,
                 )
 
@@ -1113,12 +1190,11 @@ class DueDiligenceController(CryptoBaseController):
             Show information about most important coins events. Most of coins doesn't have any events.
             You can display only top N number of events with --limit parameter.
             You can sort data by id, date , date_to, name, description, is_conference --sort parameter
-            and also with --descend flag to sort descending.
+            and also with --reverse flag to sort ascending.
             You can use additional flag --urls to see urls for each event
             Displays:
                 date , date_to, name, description, is_conference, link, proof_image_link""",
         )
-
         parser.add_argument(
             "-l",
             "--limit",
@@ -1127,7 +1203,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Limit of records",
             type=check_positive,
         )
-
         parser.add_argument(
             "-s",
             "--sort",
@@ -1137,15 +1212,18 @@ class DueDiligenceController(CryptoBaseController):
             default="date",
             choices=coinpaprika_view.EVENTS_FILTERS,
         )
-
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         parser.add_argument(
             "-u",
             "--urls",
@@ -1154,7 +1232,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Flag to show urls. If you will use that flag you will see only date, name, link columns",
             default=False,
         )
-
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
@@ -1164,7 +1241,7 @@ class DueDiligenceController(CryptoBaseController):
                     symbol=self.symbol,
                     limit=ns_parser.limit,
                     sortby=ns_parser.sortby,
-                    ascend=not ns_parser.descend,
+                    ascend=ns_parser.reverse,
                     links=ns_parser.urls,
                     export=ns_parser.export,
                 )
@@ -1179,12 +1256,11 @@ class DueDiligenceController(CryptoBaseController):
             description="""Show last 10 tweets for given coin.
                 You can display only N number of tweets with --limit parameter.
                 You can sort data by date, user_name, status, retweet_count, like_count --sort parameter
-                and also with --descend flag to sort descending.
+                and also with --reverse flag to sort ascending.
                 Displays:
                     date, user_name, status, retweet_count, like_count
                 """,
         )
-
         parser.add_argument(
             "-l",
             "--limit",
@@ -1193,7 +1269,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Limit of records",
             type=check_positive,
         )
-
         parser.add_argument(
             "-s",
             "--sort",
@@ -1203,15 +1278,18 @@ class DueDiligenceController(CryptoBaseController):
             default="date",
             choices=coinpaprika_view.TWEETS_FILTERS,
         )
-
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
@@ -1221,7 +1299,7 @@ class DueDiligenceController(CryptoBaseController):
                     symbol=self.symbol,
                     limit=ns_parser.limit,
                     sortby=ns_parser.sortby,
-                    ascend=not ns_parser.descend,
+                    ascend=ns_parser.reverse,
                     export=ns_parser.export,
                 )
 
@@ -1381,22 +1459,25 @@ class DueDiligenceController(CryptoBaseController):
                 [Source: https://messari.io]
             """,
         )
-
         parser.add_argument(
-            "--descend",
+            "-r",
+            "--reverse",
             action="store_true",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED, limit=5
         )
 
         if ns_parser:
             messari_view.display_roadmap(
-                ascend=not ns_parser.descend,
+                ascend=ns_parser.reverse,
                 symbol=self.symbol.upper(),
                 limit=ns_parser.limit,
                 export=ns_parser.export,
@@ -1706,7 +1787,6 @@ class DueDiligenceController(CryptoBaseController):
             default="en",
             choices=cryptopanic_model.REGIONS,
         )
-
         parser.add_argument(
             "-s",
             "--sort",
@@ -1716,15 +1796,17 @@ class DueDiligenceController(CryptoBaseController):
             default="published_at",
             choices=cryptopanic_model.SORT_FILTERS,
         )
-
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
-            default=True,
+            "--reverse",
+            action="store_true",
+            dest="reverse",
+            default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
-
         parser.add_argument(
             "-u",
             "--urls",
@@ -1733,7 +1815,6 @@ class DueDiligenceController(CryptoBaseController):
             help="Flag to disable urls. Hides column with URL.",
             default=True,
         )
-
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
@@ -1744,8 +1825,78 @@ class DueDiligenceController(CryptoBaseController):
                 source=None,
                 symbol=self.symbol,
                 export=ns_parser.export,
-                ascend=not ns_parser.descend,
+                ascend=ns_parser.reverse,
                 post_kind=ns_parser.kind,
                 filter_=ns_parser.filter,
                 region=ns_parser.region,
             )
+
+    @log_start_end(log=logger)
+    def call_funot(self, other_args):
+        """Process fun command"""
+        parser = argparse.ArgumentParser(
+            prog="funot",
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description="""Display fundamental metric over time [Source: Token Terminal]""",
+        )
+        parser.add_argument(
+            "-m",
+            "--metric",
+            default="",
+            choices=tokenterminal_model.METRICS,
+            dest="metric",
+            help="Choose metric of interest",
+        )
+        parser.add_argument(
+            "-p",
+            "--project",
+            required="-h" not in other_args,
+            choices=tokenterminal_model.get_project_ids(),
+            dest="project",
+            help="Choose project of interest",
+        )
+
+        if other_args and not other_args[0][0] == "-":
+            other_args.insert(0, "-p")
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, EXPORT_BOTH_RAW_DATA_AND_FIGURES
+        )
+        if ns_parser:
+            tokenterminal_view.display_fundamental_metric_from_project_over_time(
+                metric=ns_parser.metric,
+                project=ns_parser.project,
+                export=ns_parser.export,
+            )
+
+    @log_start_end(log=logger)
+    def call_desc(self, other_args):
+        """Process desc command"""
+        parser = argparse.ArgumentParser(
+            prog="desc",
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description="""Display project description [Source: Token Terminal]""",
+        )
+        parser.add_argument(
+            "-p",
+            "--project",
+            choices=tokenterminal_model.get_project_ids(),
+            required="-h" not in other_args,
+            dest="project",
+            help="Choose project of interest",
+        )
+
+        if other_args and not other_args[0][0] == "-":
+            other_args.insert(0, "-p")
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
+        )
+        if ns_parser:
+            if ns_parser.project in tokenterminal_model.get_project_ids():
+                tokenterminal_view.display_description(
+                    project=ns_parser.project,
+                    export=ns_parser.export,
+                )

@@ -6,7 +6,7 @@ import argparse
 import logging
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -40,6 +40,7 @@ class CoinbaseController(BaseController):
         "created_at",
         "amount",
     ]
+    deposit_type = ["internal_deposit", "deposit"]
     PATH = "/portfolio/bro/cb/"
 
     def __init__(self, queue: List[str] = None):
@@ -48,10 +49,37 @@ class CoinbaseController(BaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["orders"]["-s"] = {c: None for c in self.order_sortby}
-            choices["orders"]["--sortby"] = {c: None for c in self.order_sortby}
-            choices["deposits"]["-s"] = {c: None for c in self.deposit_sort}
-            choices["deposits"]["--sortby"] = {c: None for c in self.deposit_sort}
+
+            choices["account"] = {
+                "--all": {},
+                "--currency": None,
+                "-c": "--currency",
+            }
+            choices["history"] = {
+                "--acc": None,
+                "-a": "--acc",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["orders"] = {
+                "--sortby": {c: {} for c in self.order_sortby},
+                "-s": "--sortby",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+            }
+            choices["deposits"] = {
+                "--type": {c: {} for c in self.deposit_type},
+                "-t": "--type",
+                "--sortby": {c: {} for c in self.deposit_sort},
+                "-s": "--sortby",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
+            }
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -167,11 +195,16 @@ class CoinbaseController(BaseController):
             choices=self.order_sortby,
         )
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         if other_args and other_args[0][0] != "-":
             other_args.insert(0, "--acc")
@@ -182,7 +215,10 @@ class CoinbaseController(BaseController):
 
         if ns_parser:
             coinbase_view.display_orders(
-                ns_parser.limit, ns_parser.sortby, ns_parser.descend, ns_parser.export
+                limit=ns_parser.limit,
+                sortby=ns_parser.sortby,
+                descend=not ns_parser.reverse,
+                export=ns_parser.export,
             )
 
     @log_start_end(log=logger)
@@ -201,7 +237,7 @@ class CoinbaseController(BaseController):
             type=str,
             help="Deposit type. Either: internal_deposits (transfer between portfolios) or deposit",
             default="deposit",
-            choices=["internal_deposit", "deposit"],
+            choices=self.deposit_type,
         )
         parser.add_argument(
             "-l",
@@ -221,20 +257,25 @@ class CoinbaseController(BaseController):
             choices=self.deposit_sort,
         )
         parser.add_argument(
-            "--descend",
-            action="store_false",
-            help="Flag to sort in descending order (lowest first)",
-            dest="descend",
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
         )
         if ns_parser:
             coinbase_view.display_deposits(
-                ns_parser.limit,
-                ns_parser.sortby,
-                ns_parser.type,
-                ns_parser.descend,
-                ns_parser.export,
+                limit=ns_parser.limit,
+                sortby=ns_parser.sortby,
+                deposit_type=ns_parser.type,
+                descend=ns_parser.reverse,
+                export=ns_parser.export,
             )

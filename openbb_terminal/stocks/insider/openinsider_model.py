@@ -10,7 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from openbb_terminal.decorators import log_start_end
-from openbb_terminal.core.config.paths import PRESETS_DIRECTORY
+from openbb_terminal.core.config.paths import USER_PRESETS_DIRECTORY
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
@@ -1109,16 +1109,16 @@ def get_preset_choices() -> Dict:
     filepath as value
     """
 
-    PRESETS_PATH = PRESETS_DIRECTORY / "stocks" / "insider"
+    PRESETS_PATH = USER_PRESETS_DIRECTORY / "stocks" / "insider"
     PRESETS_PATH_DEFAULT = Path(__file__).parent / "presets"
     preset_choices = {
-        filepath.name: filepath
+        filepath.name.strip(".ini"): filepath
         for filepath in PRESETS_PATH.iterdir()
         if filepath.suffix == ".ini"
     }
     preset_choices.update(
         {
-            filepath.name: filepath
+            filepath.name.strip(".ini"): filepath
             for filepath in PRESETS_PATH_DEFAULT.iterdir()
             if filepath.suffix == ".ini"
         }
@@ -1143,7 +1143,11 @@ def get_open_insider_link(preset_loaded: str) -> str:
     """
     preset = configparser.RawConfigParser()
     preset.optionxform = str  # type: ignore
-    preset.read(get_preset_choices()[preset_loaded])
+    choices = get_preset_choices()
+    if preset_loaded not in choices:
+        console.print("[red]Could not find the link[/red]\n")
+        return ""
+    preset.read(choices[preset_loaded])
 
     d_general = dict(preset["General"])
     d_date = dict(preset["Date"])
@@ -1477,7 +1481,6 @@ def get_print_insider_data(type_insider: str = "lcb", limit: int = 10):
         df.columns = columns
     else:
         df.columns = columns[1:]
-
     df["Filing Date"] = df["Filing Date"].apply(
         lambda x: "\n".join(textwrap.wrap(x, width=10)) if isinstance(x, str) else x
     )

@@ -1,27 +1,34 @@
 # IMPORTATION STANDARD
 import os
-from distutils.util import strtobool
+
 
 # IMPORTATION THIRDPARTY
 import dotenv
 
 # IMPORTATION INTERNAL
 
-from openbb_terminal.core.config.paths import USER_ENV_FILE, REPOSITORY_ENV_FILE
+from openbb_terminal.core.config.paths import (
+    PACKAGE_ENV_FILE,
+    USER_ENV_FILE,
+    REPOSITORY_ENV_FILE,
+)
+from openbb_terminal.base_helpers import load_env_vars, strtobool
 from .helper_classes import TerminalStyle as _TerminalStyle
 
 dotenv.load_dotenv(USER_ENV_FILE)
 dotenv.load_dotenv(REPOSITORY_ENV_FILE, override=True)
+dotenv.load_dotenv(PACKAGE_ENV_FILE, override=True)
 
 # Terminal UX section
-theme = _TerminalStyle(
-    os.getenv("OPENBB_MPLSTYLE") or "dark",
-    os.getenv("OPENBB_MPFSTYLE") or "dark",
-    os.getenv("OPENBB_RICHSTYLE") or "dark",
-)
+MPL_STYLE = os.getenv("OPENBB_MPLSTYLE") or "dark"
+PMF_STYLE = os.getenv("OPENBB_PMFSTYLE") or "dark"
+RICH_STYLE = os.getenv("OPENBB_RICHSTYLE") or "dark"
 
-# Set to True to see full stack traces for debugging/error reporting
-DEBUG_MODE = False
+theme = _TerminalStyle(
+    MPL_STYLE,
+    PMF_STYLE,
+    RICH_STYLE,
+)
 
 # By default the jupyter notebook will be run on port 8888
 PAPERMILL_NOTEBOOK_REPORT_PORT = (
@@ -31,7 +38,10 @@ PAPERMILL_NOTEBOOK_REPORT_PORT = (
 # Logging section
 
 # USE IN LOG LINES + FOR FOLDER NAME INSIDE S3 BUCKET
-LOGGING_APP_NAME = os.getenv("OPENBB_LOGGING_APP_NAME") or "gst"
+if "site-packages" in __file__:
+    LOGGING_APP_NAME = "gst_packaged_pypi"
+else:
+    LOGGING_APP_NAME = os.getenv("OPENBB_LOGGING_APP_NAME") or "gst"
 # AWS KEYS
 LOGGING_AWS_ACCESS_KEY_ID = (
     os.getenv("OPENBB_LOGGING_AWS_ACCESS_KEY_ID") or "REPLACE_ME"
@@ -39,13 +49,12 @@ LOGGING_AWS_ACCESS_KEY_ID = (
 LOGGING_AWS_SECRET_ACCESS_KEY = (
     os.getenv("OPENBB_LOGGING_AWS_SECRET_ACCESS_KEY") or "REPLACE_ME"
 )
+LOGGING_COMMIT_HASH = str(os.getenv("OPENBB_LOGGING_COMMIT_HASH", "REPLACE_ME"))
 # D | H | M | S
 LOGGING_FREQUENCY = os.getenv("OPENBB_LOGGING_FREQUENCY") or "H"
 # stdout,stderr,noop,file
 LOGGING_HANDLERS = os.getenv("OPENBB_LOGGING_HANDLERS") or "file"
-LOGGING_ROLLING_CLOCK = bool(
-    strtobool(os.getenv("OPENBB_LOGGING_ROLLING_CLOCK", "False"))
-)
+LOGGING_ROLLING_CLOCK = load_env_vars("OPENBB_LOGGING_ROLLING_CLOCK", strtobool, False)
 # CRITICAL = 50
 # FATAL = CRITICAL
 # ERROR = 40
@@ -54,7 +63,10 @@ LOGGING_ROLLING_CLOCK = bool(
 # INFO = 20
 # DEBUG = 10
 # NOTSET = 0
-LOGGING_VERBOSITY = int(os.getenv("OPENBB_LOGGING_VERBOSITY") or 20)
+LOGGING_VERBOSITY = load_env_vars("OPENBB_LOGGING_VERBOSITY", int, 20)
+# LOGGING SUB APP
+LOGGING_SUB_APP = os.getenv("OPENBB_LOGGING_SUB_APP") or "terminal"
+LOGGING_SUPPRESS = False
 
 # API Keys section
 
@@ -106,7 +118,7 @@ OANDA_ACCOUNT = os.getenv("OPENBB_OANDA_ACCOUNT") or "REPLACE_ME"
 OANDA_TOKEN = os.getenv("OPENBB_OANDA_TOKEN") or "REPLACE_ME"
 
 # https://tradier.com/products/market-data-api
-TRADIER_TOKEN = os.getenv("OPENBB_API_TRADIER_TOKEN") or "REPLACE_ME"
+API_TRADIER_TOKEN = os.getenv("OPENBB_API_TRADIER_TOKEN") or "REPLACE_ME"
 
 # Selenium Webbrowser drivers can be found at https://selenium-python.readthedocs.io/installation.html
 WEBDRIVER_TO_USE = "chrome"
@@ -123,7 +135,7 @@ API_BINANCE_SECRET = os.getenv("OPENBB_API_BINANCE_SECRET") or "REPLACE_ME"
 API_FINNHUB_KEY = os.getenv("OPENBB_API_FINNHUB_KEY") or "REPLACE_ME"
 
 # https://iexcloud.io
-API_IEX_TOKEN = os.getenv("OPENBB_API_IEX_KEY") or "REPLACE_ME"
+API_IEX_TOKEN = os.getenv("OPENBB_API_IEX_TOKEN") or "REPLACE_ME"
 
 # https://www.sentimentinvestor.com
 API_SENTIMENTINVESTOR_TOKEN = (
@@ -163,6 +175,9 @@ API_SMARTSTAKE_TOKEN = os.getenv("OPENBB_API_SMARTSTAKE_TOKEN") or "REPLACE_ME"
 # https://messari.io/
 API_MESSARI_KEY = os.getenv("OPENBB_API_MESSARI_KEY") or "REPLACE_ME"
 
+# https://sdk.flipsidecrypto.xyz/shroomdk
+API_SHROOM_KEY = os.getenv("OPENBB_API_SHROOM_KEY") or "REPLACE_ME"
+
 # https://docs.github.com/en/rest/guides/getting-started-with-the-rest-api
 API_GITHUB_KEY = os.getenv("OPENBB_API_GITHUB_KEY") or "REPLACE_ME"
 
@@ -170,4 +185,10 @@ API_GITHUB_KEY = os.getenv("OPENBB_API_GITHUB_KEY") or "REPLACE_ME"
 API_SANTIMENT_KEY = os.getenv("OPENBB_API_SANTIMENT_KEY") or "REPLACE_ME"
 
 # https://eodhistoricaldata.com/r/?ref=869U7F4J
-API_EODHD_TOKEN = os.getenv("OPENBB_API_EODHD_KEY") or "REPLACE_ME"
+API_EODHD_KEY = os.getenv("OPENBB_API_EODHD_KEY") or "REPLACE_ME"
+
+# https://tokenterminal.com
+API_TOKEN_TERMINAL_KEY = os.getenv("OPENBB_API_TOKEN_TERMINAL_KEY") or "REPLACE_ME"
+
+# https://stocksera.pythonanywhere.com/accounts/developers
+API_STOCKSERA_KEY = os.getenv("OPENBB_API_STOCKSERA_KEY") or "REPLACE_ME"

@@ -6,51 +6,52 @@ The following is a set of guidelines for contributing to OpenBB Terminal. These 
 Use your best judgment, and feel free to propose changes to this document in a pull request.
 
 - [CONTRIBUTING](#contributing)
-  - [BASIC](#basic)
-    - [Adding a new command](#adding-a-new-command)
-      - [Select Feature](#select-feature)
-      - [Model](#model)
-      - [View](#view)
-      - [Controller](#controller)
-      - [Add API endpint](#add-api-endpoint)
-      - [Add Documentation](#add-documentation)
-      - [Open a Pull Request](#open-a-pull-request)
-      - [Review Process](#review-process)
-    - [Understand Code Structure](#understand-code-structure)
-    - [Follow Coding Guidelines](#follow-coding-guidelines)
-      - [General Code Requirements](#general-code-requirements)
-      - [File Specific Requirements](#file-specific-requirements)
-      - [Coding Style](#coding-style)
-        - [OpenBB Style Guide](#openbb-style-guide)
-          - [Flags](#flags)
-          - [Output format](#output-format)
-          - [Time-related](#time-related)
-          - [Data selection and manipulation](#data-selection-and-manipulation)
-          - [Financial instrument characteristics](#financial-instrument-characteristics)
-        - [Naming Convention](#naming-convention)
-        - [Docstrings](#docstrings)
-        - [Linters](#linters)
-        - [Command names](#command-names)
-    - [External API Keys](#external-api-keys)
-      - [Creating API key](#creating-api-key)
-      - [Setting and checking API key](#setting-and-checking-api-key)
-  - [ADVANCED](#advanced)
-    - [Important functions and classes](#important-functions-and-classes)
-      - [Base controller class](#base-controller-class)
-    - [Default Data Sources](#default-data-sources)
-      - [Export Data](#export-data)
-      - [Queue and pipeline](#queue-and-pipeline)
-      - [Auto Completer](#auto-completer)
-      - [Logging](#logging)
-      - [Internationalization](#internationalization)
-    - [Write Code and Commit](#write-code-and-commit)
-      - [Pre Commit Hooks](#pre-commit-hooks)
-      - [Coding](#coding)
-      - [Git Process](#git-process)
-    - [Add a Test](#add-a-test)
-      - [Pytest](#pytest)
-      - [Coverage](#coverage)
-      - [VCR](#vcr)
+- [BASIC](#basic)
+  - [Adding a new command](#adding-a-new-command)
+    - [Select Feature](#select-feature)
+    - [Model](#model)
+    - [View](#view)
+    - [Controller](#controller)
+    - [Add SDK endpoint](#add-sdk-endpoint)
+    - [Add Documentation](#add-documentation)
+    - [Open a Pull Request](#open-a-pull-request)
+    - [Review Process](#review-process)
+  - [Understand Code Structure](#understand-code-structure)
+    - [Backend](#backend)
+    - [Frontend](#frontend)
+  - [Follow Coding Guidelines](#follow-coding-guidelines)
+    - [General Code Requirements](#general-code-requirements)
+    - [File Specific Requirements](#file-specific-requirements)
+    - [Coding Style](#coding-style)
+      - [OpenBB Style Guide](#openbb-style-guide)
+      - [Flags](#flags)
+      - [Output format](#output-format)
+      - [Time-related](#time-related)
+      - [Data selection and manipulation](#data-selection-and-manipulation)
+      - [Financial instrument characteristics](#financial-instrument-characteristics)
+      - [Naming Convention](#naming-convention)
+      - [Docstrings](#docstrings)
+      - [Linters](#linters)
+      - [Command names](#command-names)
+      - [UI and UX](#ui-and-ux)
+  - [External API Keys](#external-api-keys)
+    - [Creating API key](#creating-api-key)
+    - [Setting and checking API key](#setting-and-checking-api-key)
+- [ADVANCED](#advanced)
+  - [Important functions and classes](#important-functions-and-classes)
+    - [Base controller class](#base-controller-class)
+  - [Default Data Sources](#default-data-sources)
+    - [Export Data](#export-data)
+    - [Queue and pipeline](#queue-and-pipeline)
+    - [Auto Completer](#auto-completer)
+    - [Logging](#logging)
+    - [Internationalization](#internationalization)
+  - [Write Code and Commit](#write-code-and-commit)
+    - [Pre Commit Hooks](#pre-commit-hooks)
+    - [Coding](#coding)
+    - [Git Process](#git-process)
+  - [Add a Test](#add-a-test)
+  - [Installers](#installers)
 
 # BASIC
 
@@ -274,11 +275,11 @@ def call_shorted(self, other_args: List[str]):
 
         ns_parser = parse_known_args_and_warn(
             parser,
-            other_args, 
-            limit=10, 
+            other_args,
+            limit=10,
             export=EXPORT_ONLY_RAW_DATA_ALLOWED
         )
-        
+
         if ns_parser:
           yahoofinance_view.display_most_shorted(
               num_stocks=ns_parser.num,
@@ -305,11 +306,11 @@ The **import only occurs inside this menu call**, this is so that the loading ti
 
 In addition, note the `self.load_class` which allows to not create a new DarkPoolShortsController instance but re-load the previous created one. Unless the arguments `self.ticker, self.start, self.stock` have changed since. The `self.queue` list of commands is passed around as it contains the commands that the terminal must perform.
 
-### Add API endpoint
+### Add SDK endpoint
 
-In order to add a command to the API, follow these steps:
+In order to add a command to the SDK, follow these steps:
 
-1. Go to the `api.py` file and scroll to the `functions` dictionary, it should look like this:
+1. Go to the `sdk.py` file and scroll to the `functions` dictionary, it should look like this:
 
     ```python
     functions = {
@@ -323,11 +324,11 @@ In order to add a command to the API, follow these steps:
             "model": "openbb_terminal.stocks.stocks_helper.load",
             "view": "openbb_terminal.stocks.stocks_helper.display_candle",
         },
-    
+
     ...
     ```
 
-2. Add a new key to the dictionary, which corresponds to the way the added command shall be accessed from the api.
+2. Add a new key to the dictionary, which corresponds to the way the added command shall be accessed from the sdk.
 This is called the `virtual path`. In this case it should be `stocks.dps.shorted`.
 3. Now it is time to add the value to the key. This key shall be another dictionary with a `model` key and possibly a
 `view` key.
@@ -341,11 +342,11 @@ This is called the `virtual path`. In this case it should be `stocks.dps.shorted
     ```python
     functions = {
         ...
-    
+
         "stocks.dps.shorted": {
             "model": "openbb_terminal.stocks.dark_pool_shorts.yahoofinance_model.get_most_shorted",
         },
-    
+
         ...
     ```
 
@@ -463,11 +464,11 @@ iterations on that code and have it to be more future proof, but also allows the
 
 Often in the past the reviewers have suggested better coding practices, e.g. using `1_000_000` instead of `1000000` for
 better visibility, or suggesting a speed optimization improvement.
-  
+
 ## Understand Code Structure
 
 ### Backend
-  
+
 CLI :computer: → `_controller.py` :robot: →&nbsp;`_view.py` :art: &nbsp;&nbsp;&nbsp; → &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`_model.py` :brain:<br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -481,7 +482,7 @@ CLI :computer: → `_controller.py` :robot: →&nbsp;`_view.py` :art: &nbsp;&nbs
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   &#8593;
   &nbsp;&nbsp;
-`api.py` :factory:
+`sdk.py` :factory:
   &nbsp;
   &#8593;
 
@@ -490,7 +491,7 @@ CLI :computer: → `_controller.py` :robot: →&nbsp;`_view.py` :art: &nbsp;&nbs
 | **_controller.py** :robot: | The router/input validator | The controller file should hold the least amount of logic possible. Its role is to be a stupid (no logic) router and redirect the command correctly while checking the input with argparser.   |
 | **_view.py** :art:         | The artist     | The view file should only output or visualise the data it gets from the `_model` file! The `_view` can limit the data coming from the `_model`, otherwise the data object should be identical in the `_view` and the `_model` files. |
 | **_model.py** 🧠           |The brain       | The model file is where everything fun happens. The data is gathered (external APIs), processed and returned here.                                                                |
-| **api.py** 🏭              |The API Factory | The API file is where the callable functions are created for the API. There is only one api file in the openbb_terminal folder.                                                                                |
+| **sdk.py** 🏭              |The SDK Factory | The SDK file is where the callable functions are created for the SDK. There is only one SDK file in the openbb_terminal folder.                                                                                |
 
 ### Frontend
 
@@ -550,8 +551,8 @@ With:
 
 1. Each function should have default values for non critical kwargs
 
-    - Why? It increases code readability and acts as an input example for the functions arguments. This increases the ease of use of the functions through the api, but also just generally.
-  
+    - Why? It increases code readability and acts as an input example for the functions arguments. This increases the ease of use of the functions through the SDK, but also just generally.
+
     <br>
 
     <table>
@@ -562,10 +563,10 @@ With:
     <td>
 
     ```python
-    def display_last_uni_swaps(   
-      top: int = 10,   
-      sortby: str = "timestamp",   
-      descend: bool = False,   
+    def display_last_uni_swaps(
+      top: int = 10,
+      sortby: str = "timestamp",
+      descend: bool = False,
       export: str = "",) -> None:
     ```
 
@@ -574,9 +575,9 @@ With:
 
     ```python
     def display_last_uni_swaps(
-      top: int,   
+      top: int,
       sortby: str,
-      descend: bool,   
+      descend: bool,
       export: str,) -> None:
     ```
 
@@ -587,11 +588,11 @@ With:
     <br>
 
 2. Simple and understandable input objects; avoid for example weird dictionaries packed with data: {“title”: DataFrame}
-  
+
     - Why? Ease of use and often these complex formats are clumsy, prone to error and the formatting required for complex parameters is time consuming and unneeded.
 
     <br>
-  
+
     <table>
     <tr>
     <td> Good code :white_check_mark: </td> <td> Bad code :x: </td>
@@ -600,8 +601,8 @@ With:
     <td>
 
     ```python
-    def get_coins(       
-      top: int = 250,       
+    def get_coins(
+      top: int = 250,
       category: str = "") -> pd.DataFrame:
     ```
 
@@ -609,10 +610,10 @@ With:
     <td>
 
     ```python
-    def load(   
-      file: str,   
-      file_types: list,   
-      data_files: Dict[Any, Any],   
+    def load(
+      file: str,
+      file_types: list,
+      data_files: Dict[Any, Any],
       data_examples: Dict[Any, Any],) -> pd.DataFrame:
     ```
 
@@ -623,15 +624,15 @@ With:
     <br>
 
 3. Each function needs to have a docstring explaining what it does, its parameters and what it returns.
-  
-    - Why? You can use the function without reading its source code. This improves the developing experience and api usage. The api factory also can’t handle functions with out docstrings.
+
+    - Why? You can use the function without reading its source code. This improves the developing experience and SDK usage. The SDK factory also can’t handle functions with out docstrings.
 
     <br>
-  
+
 4. Consistent and clear argument naming; not `symbol` in _view and then `ticker` in `_file` -> ticker everywhere; the name should be descriptive of what information it hold (see Style Guide section below)
-  
+
     - Why? You can quickly understand what the input it should be; example: tickers and stock names are fundamentally different, but they’re both strings so they should be named accordingly.
-  
+
     <br>
 
     <table>
@@ -662,7 +663,7 @@ With:
 
     - Why? Two reasons:
 
-    These calculations can then be used outside of the class with custom data; for example via the api or for tests.
+    These calculations can then be used outside of the class with custom data; for example via the sdk or for tests.
 
     ```python
     from openbb_terminal.portfolio.portfolio_helper import get_gaintopain_ratio
@@ -671,18 +672,18 @@ With:
     get_gaintopain_ratio(historical_trade_data, benchmark_trades, benchmark_returns)
     ```
 
-    The function can be loaded in API factory as an endpoint and user can get result by passing the class instance.
+    The function can be loaded in SDK factory as an endpoint and user can get result by passing the class instance.
 
     ```python
-    from openbb_terminal.api import openbb
-    from openbb_terminal.api import Portfolio
+    from openbb_terminal.sdk import openbb
+    from openbb_terminal.sdk import Portfolio
 
     transactions = Portfolio.read_orderbook("../../portfolio/holdings/example.csv")
     P = Portfolio(transactions)
     P.generate_portfolio_data()
-    P.load_benchmark()
+    P.set_benchmark()
 
-    # API endpoint access
+    # SDK endpoint access
     openbb.portfolio.gaintopain(P)
     ```
 
@@ -694,14 +695,14 @@ With:
     <td>
 
     ```python
-    def get_gaintopain_ratio(portfolio: PortfolioModel) -> pd.DataFrame:  
+    def get_gaintopain_ratio(portfolio: PortfolioEngine) -> pd.DataFrame:
 
-    """..."""   
+    """..."""
 
     gtp_period_df = portfolio_helper.get_gaintopain_ratio(
-      portfolio.historical_trade_data, 
-      portfolio.benchmark_trades, 
-      portfolio.benchmark_returns)   
+      portfolio.historical_trade_data,
+      portfolio.benchmark_trades,
+      portfolio.benchmark_returns)
 
     return gtp_period_df
     ```
@@ -710,14 +711,14 @@ With:
     <td>
 
     ```python
-    def get_gaintopain_ratio(self) -> pd.DataFrame:   
+    def get_gaintopain_ratio(self) -> pd.DataFrame:
 
-    """..."""   
+    """..."""
 
-    vals = list()   
+    vals = list()
 
-    for period in portfolio_helper.PERIODS:             
-           port_rets = portfolio_helper.filter_df_by_period(self.returns, period)       
+    for period in portfolio_helper.PERIODS:
+           port_rets = portfolio_helper.filter_df_by_period(self.returns, period)
            bench_rets =  portfolio_helper.filter_df_by_period(self.benchmark_returns, period)
 
     ...
@@ -731,10 +732,10 @@ With:
 
 6. Naming among related model and view functions should be obvious; just different prefix if possible
 
-    - Why? Eases API factory mapping and keeps code clean.
+    - Why? Eases SDK factory mapping and keeps code clean.
 
     <br>
-  
+
     <table>
     <tr>
     <td> Good code :white_check_mark: </td> <td> Bad code :x: </td>
@@ -787,7 +788,7 @@ With:
 
 1. No data altering in the view file or controller file (view and model with same args)
 
-    - Why? Consistency and good code structure. This also improves the api user experience. Thus follows that view and model files will have the same arguments (except for output options like raw, export, external_axes), since no data changes shall be done in the view file.
+    - Why? Consistency and good code structure. This also improves the SDK user experience. Thus follows that view and model files will have the same arguments (except for output options like raw, export, external_axes), since no data changes shall be done in the view file.
 
     <br>
 
@@ -807,7 +808,7 @@ When in doubt, follow <https://www.python.org/dev/peps/pep-0008/>.
 
 #### OpenBB Style Guide
 
-The style guide is a reverse dictionary for argument names, where a brief definition is mapped to an OpenBB recommended argument name and type. When helpful a code snippet example is added below. Following this guide will help keep argument naming consistent and improve API users experience.
+The style guide is a reverse dictionary for argument names, where a brief definition is mapped to an OpenBB recommended argument name and type. When helpful a code snippet example is added below. Following this guide will help keep argument naming consistent and improve SDK users experience.
 
 Style guide structure:
 
@@ -913,7 +914,7 @@ def get_historical_data(..., start_date: str = "2022-01-01", end_date: str = "20
     start_date: str
         Date from which data is fetched in format YYYY-MM-DD
     end_date: str
-        Date up to which data is fetched in format YYYY-MM-DD    
+        Date up to which data is fetched in format YYYY-MM-DD
     ...
     """
     data = source_model.get_data(data_name, start_date, end_date, ...)
@@ -932,10 +933,10 @@ def get_historical_data(..., start_year: str = "2022", end_year str = "2023", ..
 Interval for data observations : `interval` *(str), e.g. 60m, 90m, 1h*
 
 ```python
-def get_prices(interval: str = "60m", ...):    
+def get_prices(interval: str = "60m", ...):
     ...
     data = source.download(
-        ..., 
+        ...,
         interval=interval,
         ...
     )
@@ -944,7 +945,7 @@ def get_prices(interval: str = "60m", ...):
 Rolling window length : `window` *(int/str), e.g. 252, 252d*
 
 ```python
-def get_rolling_sum(returns: pd.Series, window: str = "252d"):    
+def get_rolling_sum(returns: pd.Series, window: str = "252d"):
     rolling_sum = returns.rolling(window=window).sum()
 ```
 
@@ -1019,7 +1020,7 @@ Currency to convert data : `currency` *(str) e.g. EUR, USD*
 Instrument ticker, name or currency pair : `symbol` *(str), e.g. AAPL, ethereum, ETH, ETH-USD*
 
 ```python
-def get_prices(symbol: str = "AAPL", ...):    
+def get_prices(symbol: str = "AAPL", ...):
     ...
     data = source.download(
         tickers=symbol,
@@ -1115,6 +1116,17 @@ The following linters are used by our codebase:
 
 - The command name **should not** have the data source explicit
 
+#### UI and UX
+
+<img width="1676" alt="Screenshot 2022-10-26 at 12 17 19" src="https://user-images.githubusercontent.com/25267873/198012768-4cfecf7b-e961-4e55-a613-6648c0107b1e.png">
+
+It is important to keep a coherent UI/UX throughout the terminal. These are the rules we must abide:
+
+- There is 1 single empty line between user input and start of the command output.
+- There is 1 single empty line between command output and the user input.
+- The menu help has 1 empty line above text and 1 empty line below. Both still within the rectangular panel.
+- From menu help rectangular panel there's no empty line below - this makes it more clear to the user that they are inside such menu.
+
 ## External API Keys
 
 ### Creating API key
@@ -1137,23 +1149,36 @@ One of the first steps once adding a new data source that requires an API key is
 The following code allows to check the validity of the IEX Cloud API key.
 
 ```python
-def check_iex_key(self, show_output: bool = False) -> None:
-    """Check IEX Cloud key"""
-    self.cfg_dict["IEXCLOUD"] = "iex"
+def check_iex_key(show_output: bool = False) -> str:
+    """Check IEX Cloud key
+
+    Parameters
+    ----------
+        show_output: bool
+            Display status string or not.
+
+    Returns
+    -------
+    status: str
+
+    """
+
     if cfg.API_IEX_TOKEN == "REPLACE_ME":  # nosec
         logger.info("IEX Cloud key not defined")
-        self.key_dict["IEXCLOUD"] = "not defined"
+        status = KeyStatus.NOT_DEFINED
     else:
         try:
-            pyEX.Client(api_token=cfg.API_IEX_TOKEN, version="v1")
+            pyEX.Client(api_token=cfg.API_IEX_TOKEN, version="v1").quote(symbol="AAPL")
             logger.info("IEX Cloud key defined, test passed")
-            self.key_dict["IEXCLOUD"] = "defined, test passed"
-        except PyEXception:
-            logger.exception("IEX Cloud key defined, test failed")
-            self.key_dict["IEXCLOUD"] = "defined, test failed"
+            status = KeyStatus.DEFINED_TEST_PASSED
+        except Exception as _:  # noqa: F841
+            logger.warning("IEX Cloud key defined, test failed")
+            status = KeyStatus.DEFINED_TEST_FAILED
 
     if show_output:
-        console.print(self.key_dict["IEXCLOUD"] + "\n")
+        console.print(status.colorize() + "\n")
+
+    return status
 ```
 
 Note that there are usually 3 states:
@@ -1190,10 +1215,9 @@ def call_iex(self, other_args: List[str]):
         other_args.insert(0, "-k")
     ns_parser = parse_simple_args(parser, other_args)
     if ns_parser:
-        os.environ["OPENBB_API_IEX_KEY"] = ns_parser.key
-        dotenv.set_key(self.env_file, "OPENBB_API_IEX_KEY", ns_parser.key)
-        cfg.API_IEX_TOKEN = ns_parser.key
-        self.check_iex_key(show_output=True)
+        self.status_dict["iex"] = keys_model.set_iex_key(
+            key=ns_parser.key, persist=True, show_output=True
+        )
 ```
 
 # ADVANCED
@@ -1287,7 +1311,7 @@ In the `_view.py` files it is common having at the end of each function `export_
 
 ```python
     export_data(
-        export, 
+        export,
         os.path.dirname(os.path.abspath(__file__)),
         "contracts",
         df_contracts
@@ -1361,8 +1385,8 @@ if session and obbff.USE_PROMPT_TOOLKIT:
      "-c": "--commodity",
      "--sortby": {c: None for c in self.wsj_sortby_cols_dict.keys()},
      "-s": "--sortby",
-     "--ascend": {},
-     "-a": "--ascend",
+     "--reverse": {},
+     "-r": "--reverse",
   }
   self.choices["map"] = {
      "--period": {c: None for c in self.map_period_list},
@@ -1379,7 +1403,7 @@ Important things to note:
 - `self.choices["overview"]`: this corresponds to the list of choices that the user is allowed to select after specifying `$ overview`
 - `"--commodity": {c: None for c in self.futures_commodities}`: this allows the user to select several commodity values after `--commodity` flag
 - `"-c": "--commodity"`: this is interpreted as `-c` having the same effect as `--commodity`
-- `"--ascend": {}`: corresponds to a boolean flag (does not expect any value after)
+- `"--reverse": {}`: corresponds to a boolean flag (does not expect any value after)
 - `"--start": None`: corresponds to a flag where the values allowed are not easily discrete due to vast range
 - `self.completer = NestedCompleter.from_nested_dict(self.choices)`: from the choices create our custom completer
 
@@ -1444,7 +1468,7 @@ def your_function() -> pd.DataFrame:
 ```
 
 ### Internationalization
-  
+
 WORK IN PROGRESS - The menu can be internationalised BUT we do not support yet help commands`-h` internationalization.
 
 In order to add support for a new language, the best approach is to:
@@ -1507,13 +1531,22 @@ Network model.
 
 ## Add a Test
 
-Unit tests minimize errors in code and quickly find errors when they do arise.
+Unit tests minimize errors in code and quickly find errors when they do arise. Integration tests are standard usage examples, which are also used to identify errors.
 
-A thorough introduction on the usage of unit tests in OpenBBTerminal can be found on the following page:
+A thorough introduction on the usage of unit tests and integration tests in OpenBBTerminal can be found on the following page respectively:
 
-[README.md](tests/README.md)
+[Unit Test README](tests/README.md)
+
+[Integration Test README](scripts/README.md)
 
 In short:
 
 - Pytest: is the tool we are using to run our tests, with the command: `pytest tests/`
 - Coverage: can be checked like running `coverage run -m pytest` or `coverage html`
+
+## Installers
+
+When implementing a new feature or fixing something within the codebase, it is necessary to ensure that it is working
+appropriately on the terminal. However, it is equally as important to ensure that new features or fixes work on the
+installer terminal too. This is because a large portion of users utilize the installer to use OpenBB Terminal.
+More information on how to build an installer can be found [here](build/README.md).

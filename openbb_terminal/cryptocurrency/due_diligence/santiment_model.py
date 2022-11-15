@@ -6,7 +6,7 @@ import requests
 import pandas as pd
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.rich_config import console
 from openbb_terminal.cryptocurrency.discovery.pycoingecko_model import read_file_data
 
@@ -25,14 +25,13 @@ def get_slug(symbol: str) -> str:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_SANTIMENT_KEY"])
 def get_github_activity(
     symbol: str,
     dev_activity: bool = False,
     interval: str = "1d",
-    start_date: str = (datetime.now() - timedelta(days=365)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    ),
-    end_date: str = (datetime.now()).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    start_date: str = None,
+    end_date: str = None,
 ) -> pd.DataFrame:
     """Returns  a list of developer activity for a given coin and time interval.
 
@@ -44,18 +43,26 @@ def get_github_activity(
         Crypto symbol to check github activity
     dev_activity: bool
         Whether to filter only for development activity
+    interval : str
+        Interval frequency (e.g., 1d)
     start_date : int
         Initial date like string (e.g., 2021-10-01)
     end_date : int
         End date like string (e.g., 2021-10-01)
-    interval : str
-        Interval frequency (e.g., 1d)
 
     Returns
     -------
     pd.DataFrame
         developer activity over time
     """
+
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=365)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    if end_date is None:
+        end_date = (datetime.now()).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     activity_type = "dev_activity" if dev_activity else "github_activity"
 

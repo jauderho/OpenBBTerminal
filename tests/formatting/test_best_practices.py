@@ -1,7 +1,13 @@
 from typing import Optional, List, Tuple
 from inspect import signature
+import pytest
 
-from docs.generate import all_functions
+# Certain openbb distributions like pip do not include the docs folder,
+# this is needed for those tests
+try:
+    from docs.generate import all_functions
+except ImportError:
+    pytest.skip(allow_module_level=True)
 
 
 # A dictionary where keys are bad parameter names and values are the correct replacements
@@ -79,7 +85,7 @@ def test_bad_parameters():
     if all_overlaps:
         for overlaps, func_name, func_path, overlap_str in all_overlaps:
             final_str += (
-                f"Forbidden parameter{'s' if len(overlaps) > 1 else ''} in funcition"
+                f"Forbidden parameter{'s' if len(overlaps) > 1 else ''} in function"
                 f" '{func_name}' at {func_path}. Replace the following: {overlap_str}\n\n"
             )
 

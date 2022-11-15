@@ -7,10 +7,10 @@ import logging
 from pathlib import Path
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
-from openbb_terminal.core.config.paths import PRESETS_DIRECTORY
+from openbb_terminal.core.config.paths import USER_PRESETS_DIRECTORY
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_classes import AllowArgsWithWhiteSpace
 from openbb_terminal.helper_funcs import (
@@ -37,8 +37,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: HELP WANTED! This menu required some refactoring. Things that can be addressed:
 #       - better preset management (MVC style).
-#       - decoupling view and model in the yfinance_view
-PRESETS_PATH = PRESETS_DIRECTORY / "stocks" / "screener"
+PRESETS_PATH = USER_PRESETS_DIRECTORY / "stocks" / "screener"
 
 
 class ScreenerController(BaseController):
@@ -59,13 +58,13 @@ class ScreenerController(BaseController):
 
     PRESETS_PATH_DEFAULT = Path(__file__).parent / "presets"
     preset_choices = {
-        filepath.name: filepath
+        filepath.name.replace(".ini", ""): filepath
         for filepath in PRESETS_PATH.iterdir()
         if filepath.suffix == ".ini"
     }
     preset_choices.update(
         {
-            filepath.name: filepath
+            filepath.name.replace(".ini", ""): filepath
             for filepath in PRESETS_PATH_DEFAULT.iterdir()
             if filepath.suffix == ".ini"
         }
@@ -84,29 +83,35 @@ class ScreenerController(BaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["view"] = {c: None for c in self.preset_choices}
-            choices["set"] = {c: None for c in self.preset_choices}
-            choices["historical"]["-t"] = {
-                c: None for c in self.historical_candle_choices
+
+            choices["view"] = {c: {} for c in self.preset_choices}
+            choices["set"] = {c: {} for c in self.preset_choices}
+            choices["historical"] = {
+                "--start": None,
+                "-s": "--start",
+                "--type": {c: {} for c in self.historical_candle_choices},
+                "--no-scale": {},
+                "-n": "--no-scale",
+                "--limit": None,
+                "-l": "--limit",
             }
-            choices["overview"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["overview"]
+            screener_standard = {
+                "--preset": {c: {} for c in self.preset_choices},
+                "-p": "--preset",
+                "--sort": {c: {} for c in finviz_view.d_cols_to_sort["overview"]},
+                "-s": "--sort",
+                "--limit": None,
+                "-l": "--limit",
+                "--reverse": {},
+                "-r": "--reverse",
             }
-            choices["valuation"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["valuation"]
-            }
-            choices["financial"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["financial"]
-            }
-            choices["ownership"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["ownership"]
-            }
-            choices["performance"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["performance"]
-            }
-            choices["technical"]["-s"] = {
-                c: None for c in finviz_view.d_cols_to_sort["technical"]
-            }
+            choices["overview"] = screener_standard
+            choices["valuation"] = screener_standard
+            choices["financial"] = screener_standard
+            choices["ownership"] = screener_standard
+            choices["performance"] = screener_standard
+            choices["technical"] = screener_standard
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def parse_input(self, an_input: str) -> List:
@@ -163,12 +168,19 @@ class ScreenerController(BaseController):
             help="View specific custom preset",
             default="",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         if other_args and "-" not in other_args[0][0]:
             other_args.insert(0, "-p")
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
-        screener_view.display_presets(ns_parser.preset)
-        console.print("")
+        if ns_parser:
+            if ns_parser.preset:
+                if ns_parser.preset in finviz_model.d_signals:
+                    console.print("This is a Finviz preset.\n")
+                    return
+                ns_parser.preset += ".ini"
+            screener_view.display_presets(ns_parser.preset)
+            console.print("")
 
     @log_start_end(log=logger)
     def call_set(self, other_args: List[str]):
@@ -187,12 +199,13 @@ class ScreenerController(BaseController):
             default="template",
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         if other_args and "-" not in other_args[0][0]:
             other_args.insert(0, "-p")
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
-            self.preset = ns_parser.preset
+            self.preset = ns_parser.preset + ".ini"
         console.print("")
 
     @log_start_end(log=logger)
@@ -274,6 +287,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -285,12 +299,16 @@ class ScreenerController(BaseController):
             help="Limit of stocks to print",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -308,15 +326,20 @@ class ScreenerController(BaseController):
         )
 
         if ns_parser:
+            if self.preset.strip(".ini") in finviz_model.d_signals:
+                preset = self.preset.strip(".ini")
+            else:
+                preset = self.preset
+
             if ns_parser.sort:
                 if ns_parser.sort not in finviz_view.d_cols_to_sort["overview"]:
                     console.print(f"{ns_parser.sort} not a valid sort choice.\n")
                 else:
                     self.screen_tickers = finviz_view.screener(
-                        loaded_preset=self.preset,
+                        loaded_preset=preset,
                         data_type="overview",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -324,7 +347,7 @@ class ScreenerController(BaseController):
             else:
 
                 self.screen_tickers = finviz_view.screener(
-                    loaded_preset=self.preset,
+                    loaded_preset=preset,
                     data_type="overview",
                     limit=ns_parser.limit,
                     ascend=ns_parser.ascend,
@@ -351,6 +374,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -362,12 +386,16 @@ class ScreenerController(BaseController):
             help="Limit of stocks to print",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -393,7 +421,7 @@ class ScreenerController(BaseController):
                         loaded_preset=self.preset,
                         data_type="valuation",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -404,7 +432,7 @@ class ScreenerController(BaseController):
                     loaded_preset=self.preset,
                     data_type="valuation",
                     limit=ns_parser.limit,
-                    ascend=ns_parser.ascend,
+                    ascend=ns_parser.reverse,
                     sortby=ns_parser.sort,
                     export=ns_parser.export,
                 )
@@ -428,6 +456,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -438,14 +467,17 @@ class ScreenerController(BaseController):
             default=10,
             help="Limit of stocks to print",
         )
-
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -471,7 +503,7 @@ class ScreenerController(BaseController):
                         loaded_preset=self.preset,
                         data_type="financial",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -482,7 +514,7 @@ class ScreenerController(BaseController):
                     loaded_preset=self.preset,
                     data_type="financial",
                     limit=ns_parser.limit,
-                    ascend=ns_parser.ascend,
+                    ascend=ns_parser.reverse,
                     sortby=ns_parser.sort,
                     export=ns_parser.export,
                 )
@@ -506,6 +538,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -517,12 +550,16 @@ class ScreenerController(BaseController):
             help="Limit of stocks to print",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -549,7 +586,7 @@ class ScreenerController(BaseController):
                         loaded_preset=self.preset,
                         data_type="ownership",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -560,7 +597,7 @@ class ScreenerController(BaseController):
                     loaded_preset=self.preset,
                     data_type="ownership",
                     limit=ns_parser.limit,
-                    ascend=ns_parser.ascend,
+                    ascend=ns_parser.reverse,
                     sortby=ns_parser.sort,
                     export=ns_parser.export,
                 )
@@ -584,6 +621,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -595,12 +633,16 @@ class ScreenerController(BaseController):
             help="Limit of stocks to print",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -627,7 +669,7 @@ class ScreenerController(BaseController):
                         loaded_preset=self.preset,
                         data_type="performance",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -638,7 +680,7 @@ class ScreenerController(BaseController):
                     loaded_preset=self.preset,
                     data_type="performance",
                     limit=ns_parser.limit,
-                    ascend=ns_parser.ascend,
+                    ascend=ns_parser.store_true,
                     sortby=ns_parser.sort,
                     export=ns_parser.export,
                 )
@@ -662,6 +704,7 @@ class ScreenerController(BaseController):
             default=self.preset,
             help="Filter presets",
             choices=self.preset_choices,
+            metavar="Desired preset.",
         )
         parser.add_argument(
             "-l",
@@ -673,12 +716,16 @@ class ScreenerController(BaseController):
             help="Limit of stocks to print",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
-            dest="ascend",
-            help="Set order to Ascend, the default is Descend",
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-s",
@@ -705,7 +752,7 @@ class ScreenerController(BaseController):
                         loaded_preset=self.preset,
                         data_type="technical",
                         limit=ns_parser.limit,
-                        ascend=ns_parser.ascend,
+                        ascend=ns_parser.reverse,
                         sortby=ns_parser.sort,
                         export=ns_parser.export,
                     )
@@ -716,7 +763,7 @@ class ScreenerController(BaseController):
                     loaded_preset=self.preset,
                     data_type="technical",
                     limit=ns_parser.limit,
-                    ascend=ns_parser.ascend,
+                    ascend=ns_parser.reverse,
                     sortby=ns_parser.sort,
                     export=ns_parser.export,
                 )

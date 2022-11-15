@@ -3,12 +3,13 @@ __docformat__ = "numpy"
 
 import os
 import json
+from pathlib import Path
 from typing import Tuple
 from rich import panel
 from rich.console import Console, Theme
 from rich.text import Text
-from rich.color import Color
 import i18n
+from openbb_terminal.core.config.paths import MISCELLANEOUS_DIRECTORY
 from openbb_terminal import config_terminal as cfg
 from openbb_terminal import feature_flags as obbff
 
@@ -59,53 +60,62 @@ def get_ordered_list_sources(command_path: str):
 
     Returns
     -------
-    str:
-        The preferred source for the given command
+    list:
+        list of sources
     """
     try:
-        with open(obbff.PREFERRED_DATA_SOURCE_FILE) as f:
-            if not f.read():
-                with open("data_sources_default.json") as f2:
-                    json_doc = json.load(f2)
+        # Loading in both source files: default sources and user sources
+        default_data_source = MISCELLANEOUS_DIRECTORY / "data_sources_default.json"
+        user_data_source = Path(obbff.PREFERRED_DATA_SOURCE_FILE)
+
+        # Opening default sources file from the repository root
+        with open(str(default_data_source)) as json_file:
+            json_doc = json.load(json_file)
+
+        # If the user has added sources to their own sources file in OpenBBUserData, then use that
+        if (
+            not os.getenv("TEST_MODE")
+            and user_data_source.exists()
+            and user_data_source.stat().st_size > 0
+        ):
+            with open(str(user_data_source)) as json_file:
+                json_doc = json.load(json_file)
+
+        # We are going to iterate through each command as if it is broken up by period characters (.)
+        path_objects = command_path.split("/")[1:]
+
+        # Start iterating through the top-level JSON doc to start
+        deepest_level = json_doc
+
+        # If we still have entries in path_objects, continue to go deeper
+        while len(path_objects) > 0:
+            # Is this path object in the JSON doc? If so, go into that for our next iteration.
+            if path_objects[0] in deepest_level:
+                # We found the element, so go one level deeper
+                deepest_level = deepest_level[path_objects[0]]
+
             else:
-                f.seek(0)
-                json_doc = json.load(f)
+                # If we have not find the `load` on the deepest level it means we may be in a sub-menu
+                # and we can use the load from the Base class
+                if path_objects[0] == "load":
 
-            # We are going to iterate through each command as if it is broken up by period characters (.)
-            path_objects = command_path.split("/")[1:]
+                    # Get the context associated with the sub-menu (e.g. stocks, crypto, ...)
+                    context = command_path.split("/")[1]
 
-            # Start iterating through the top-level JSON doc to start
-            deepest_level = json_doc
+                    # Grab the load source from that context if it exists, otherwise throws an error
+                    if context in json_doc:
+                        if "load" in json_doc[context]:
+                            return json_doc[context]["load"]
 
-            # If we still have entries in path_objects, continue to go deeper
-            while len(path_objects) > 0:
-                # Is this path object in the JSON doc? If so, go into that for our next iteration.
-                if path_objects[0] in deepest_level:
-                    # We found the element, so go one level deeper
-                    deepest_level = deepest_level[path_objects[0]]
+                # We didn't find the next level, so flag that that command default source is missing
+                # Which means that there aren't more than 1 source and therefore no selection is necessary
+                return []
 
-                else:
-                    # If we have not find the `load` on the deepest level it means we may be in a sub-menu
-                    # and we can use the load from the Base class
-                    if path_objects[0] == "load":
+            # Go one level deeper into the path
+            path_objects = path_objects[1:]
 
-                        # Get the context associated with the sub-menu (e.g. stocks, crypto, ...)
-                        context = command_path.split("/")[1]
-
-                        # Grab the load source from that context if it exists, otherwise throws an error
-                        if context in json_doc:
-                            if "load" in json_doc[context]:
-                                return json_doc[context]["load"]
-
-                    # We didn't find the next level, so flag that that command default source is missing
-                    # Which means that there aren't more than 1 source and therefore no selection is necessary
-                    return []
-
-                # Go one level deeper into the path
-                path_objects = path_objects[1:]
-
-            # We got through all values, so return this as the final value
-            return deepest_level
+        # We got through all values, so return this as the final value
+        return deepest_level
 
     except Exception as e:
         console.print(
@@ -284,15 +294,7 @@ class ConsoleAndPanel:
         if kwargs and "text" in list(kwargs) and "menu" in list(kwargs):
             if not os.getenv("TEST_MODE"):
                 if obbff.ENABLE_RICH_PANEL:
-                    version = self.blend_text(
-                        f"OpenBB Terminal v{obbff.VERSION}",
-                        Color.parse("#00AAFF").triplet,
-                        Color.parse("#E4003A").triplet,
-                    )
-                    link = " (https://openbb.co)"
-                    link_text = Text(link)
-                    link_text.stylize("#FCED00", 0, len(link))
-                    version += link_text
+                    version = f"[param]OpenBB Terminal v{obbff.VERSION}[/param] (https://openbb.co)"
                     self.console.print(
                         panel.Panel(
                             "\n" + kwargs["text"],

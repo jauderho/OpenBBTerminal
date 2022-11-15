@@ -15,6 +15,7 @@ import yfinance as yf
 
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.rich_config import console
+from openbb_terminal.helpers_denomination import transform as transform_by_denomination
 
 logger = logging.getLogger(__name__)
 
@@ -417,6 +418,7 @@ TRANSFORM = {
 
 SCALES = {
     "Thousands": 1_000,
+    "Tens of thousands": 10_000,
     "Millions": 1_000_000,
     "Hundreds of millions": 100_000_000,
     "Billions": 1_000_000_000,
@@ -481,8 +483,8 @@ def get_macro_data(
     parameter: str,
     country: str,
     transform: str = "",
-    start_date=pd.to_datetime("1900-01-01"),
-    end_date=datetime.today().date(),
+    start_date=None,
+    end_date=None,
     symbol: str = "",
 ) -> Tuple[Any, Union[str, Any]]:
     """Query the EconDB database to find specific macro data about a company [Source: EconDB]
@@ -515,8 +517,16 @@ def get_macro_data(
     units
         The units of the macro data, e.g. 'Bbl/day" for oil.
     """
+
+    if start_date is None:
+        start_date = pd.to_datetime("1900-01-01")
+
+    if end_date is None:
+        end_date = datetime.today().date()
+
+    country = country.replace("_", " ")
+    country = country.title()
     country = country.replace(" ", "_")
-    country = country[0].upper() + country[1:]
     parameter = parameter.upper()
 
     if country not in COUNTRY_CODES:
@@ -561,7 +571,11 @@ def get_macro_data(
             return pd.Series(dtype=float), ""
 
         if start_date or end_date:
-            df = df.loc[start_date:end_date]
+            try:
+                df = df.loc[start_date:end_date]
+            except TypeError:
+                console.print("[red]Invalid date sent. Format as YYYY-MM-DD[/red]\n")
+                return pd.DataFrame(), "NA/NA"
 
         if (
             symbol
@@ -644,7 +658,7 @@ def get_aggregated_macro_data(
     countries: list = None,
     transform: str = "",
     start_date: str = "1900-01-01",
-    end_date=datetime.today().date(),
+    end_date: str = None,
     symbol: str = "",
 ) -> Tuple[Any, Dict[Any, Dict[Any, Any]], str]:
     """This functions groups the data queried from the EconDB database [Source: EconDB]
@@ -673,6 +687,9 @@ def get_aggregated_macro_data(
     str
         Denomination which can be Trillions, Billions, Millions, Thousands
     """
+
+    if end_date is None:
+        end_date = datetime.today().strftime("%Y-%m-%d")
 
     if parameters is None:
         parameters = ["CPI"]
@@ -704,25 +721,13 @@ def get_aggregated_macro_data(
         country_data_df[0].values.tolist(), index=country_data_df.index
     ).T
 
-    maximum_value = country_data_df.max().max()
+    (df_rounded, denomination) = transform_by_denomination(country_data_df)
 
-    if maximum_value > 1_000_000_000_000:
-        df_rounded = country_data_df / 1_000_000_000_000
-        denomination = " [in Trillions]"
-    elif maximum_value > 1_000_000_000:
-        df_rounded = country_data_df / 1_000_000_000
-        denomination = " [in Billions]"
-    elif maximum_value > 1_000_000:
-        df_rounded = country_data_df / 1_000_000
-        denomination = " [in Millions]"
-    elif maximum_value > 1_000:
-        df_rounded = country_data_df / 1_000
-        denomination = " [in Thousands]"
-    else:
-        df_rounded = country_data_df
-        denomination = ""
-
-    return df_rounded, units, denomination
+    return (
+        df_rounded,
+        units,
+        f" [in {denomination}]" if denomination != "Units" else "",
+    )
 
 
 @log_start_end(log=logger)
@@ -731,7 +736,7 @@ def get_treasuries(
     maturities: list = None,
     frequency: str = "monthly",
     start_date: str = "1900-01-01",
-    end_date: str = str(datetime.today().date()),
+    end_date: str = None,
 ) -> pd.DataFrame:
     """Get U.S. Treasury rates [Source: EconDB]
 
@@ -754,6 +759,9 @@ def get_treasuries(
     treasury_data: pd.Dataframe
         Holds data of the selected types and maturities
     """
+
+    if end_date is None:
+        end_date = datetime.today().strftime("%Y-%m-%d")
 
     if instruments is None:
         instruments = ["nominal"]

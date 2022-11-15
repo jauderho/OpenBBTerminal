@@ -103,15 +103,13 @@ def _make_request(url: str) -> Union[BeautifulSoup, None]:
 def get_startups() -> pd.DataFrame:
     """Get startups from ROSS index [Source: https://runacap.com/]
 
-    Parameters
-    ----------
-
     Returns
     -------
     pandas.DataFrame:
         list of startups
     """
-    soup = _make_request("https://runacap.com/ross-index/")
+    response = requests.get("https://runacap.com/ross-index/", timeout=10)
+    soup = BeautifulSoup(response.content, "html.parser")
     startups = []
     if soup:
         table = soup.find("table", {"id": "table_1"})

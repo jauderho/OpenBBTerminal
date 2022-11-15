@@ -8,17 +8,18 @@ from typing import Any, List, Tuple
 import requests
 import pandas as pd
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_NEWS_TOKEN"])
 def get_news(
     query: str,
     limit: int = 10,
-    start_date: str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
+    start_date: str = None,
     show_newest: bool = True,
     sources: str = "",
 ) -> List[Tuple[Any, Any]]:
@@ -33,20 +34,28 @@ def get_news(
     show_newest: bool
         flag to show newest articles first
     sources: str
-        sources to exclusively show news from
+        sources to exclusively show news from (comma separated)
 
     Returns
     ----------
     tables : List[Tuple]
         List of tuples containing news df in first index and dict containing title of news df
     """
+
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
     link = (
         f"https://newsapi.org/v2/everything?q={query}&from={start_date}&sortBy=publishedAt"
-        f"&language=en&apiKey={cfg.API_NEWS_TOKEN}"
+        "&language=en"
     )
 
     if sources:
-        link += f"&domain={sources}"
+        if "," in sources:
+            sources = ".com,".join(sources.split(","))
+        link += f"&domains={sources}.com"
+
+    link += f"&apiKey={cfg.API_NEWS_TOKEN}"
 
     response = requests.get(link)
 
@@ -82,15 +91,26 @@ def get_news(
     if articles:
         for idx, article in enumerate(articles):
             # Unnecessary to use source name because contained in link article["source"]["name"]
-            data = [
-                [article["publishedAt"].replace("T", " ").replace("Z", "")],
-                [f"{article['description']}"],
-                [article["url"]],
-            ]
+            if "description" in article:
+                data = [
+                    [article["publishedAt"].replace("T", " ").replace("Z", "")],
+                    [f"{article['description']}"],
+                    [article["url"]],
+                ]
+                table = pd.DataFrame(
+                    data, index=["published", "content", "link"], columns=["Content"]
+                )
 
-            table = pd.DataFrame(
-                data, index=["published", "content", "link"], columns=["Content"]
-            )
+            else:
+                data = [
+                    [article["publishedAt"].replace("T", " ").replace("Z", "")],
+                    [article["url"]],
+                ]
+
+                table = pd.DataFrame(
+                    data, index=["published", "link"], columns=["Content"]
+                )
+
             table.columns = table.columns.str.title()
             tables.append((table, article))
             if idx >= limit - 1:

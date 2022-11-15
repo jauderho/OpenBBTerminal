@@ -2,7 +2,7 @@
 __docformat__ = "numpy"
 
 import logging
-from datetime import datetime
+from datetime import datetime, date
 import os
 from pathlib import Path
 import csv
@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 
 from openbb_terminal.decorators import log_start_end
-from openbb_terminal.core.config.paths import PORTFOLIO_DATA_DIRECTORY
+from openbb_terminal.core.config.paths import USER_PORTFOLIO_DATA_DIRECTORY
 from openbb_terminal.rich_config import console
 from openbb_terminal.portfolio.statics import REGIONS, PERIODS
 
@@ -32,12 +32,12 @@ PERIODS_DAYS = {
         now
         - datetime(
             now.year,
-            1 if now.month < 4 else 4 if now.month < 7 else 7 if now.month < 7 else 10,
+            1 if now.month < 4 else 4 if now.month < 7 else 7 if now.month < 10 else 10,
             1,
         )
     ).days,
     "ytd": (now - datetime(now.year, 1, 1)).days,
-    "all": 0,
+    "all": 1,
     "3m": 3 * 21,
     "6m": 6 * 21,
     "1y": 12 * 21,
@@ -46,7 +46,7 @@ PERIODS_DAYS = {
     "10y": 10 * 12 * 21,
 }
 
-DEFAULT_HOLDINGS_PATH = PORTFOLIO_DATA_DIRECTORY / "holdings"
+DEFAULT_HOLDINGS_PATH = USER_PORTFOLIO_DATA_DIRECTORY / "holdings"
 
 
 def is_ticker(ticker: str) -> bool:
@@ -223,7 +223,7 @@ def get_info_from_ticker(ticker: str) -> list:
 
     filename = "tickers_info.csv"
 
-    file_path = Path(str(DEFAULT_HOLDINGS_PATH), filename)
+    file_path = Path(str(USER_PORTFOLIO_DATA_DIRECTORY), filename)
 
     if file_path.is_file() and os.stat(file_path).st_size > 0:
         # file exists and is not empty, so append if necessary
@@ -259,8 +259,19 @@ def rolling_volatility(
     pd.DataFrame
         Rolling volatility DataFrame
     """
+
     length = PERIODS_DAYS[window]
-    return portfolio_returns.rolling(length).std()
+    sample_length = len(portfolio_returns)
+
+    if length > sample_length:
+        console.print(
+            f"[red]Window length ({window}->{length}) is larger than returns length ({sample_length}).\
+            \nTry a smaller window.[/red]"
+        )
+        return pd.DataFrame()
+
+    # max(2, length) -> std needs at least 2 observations
+    return portfolio_returns.rolling(max(2, length)).std()
 
 
 def sharpe_ratio(portfolio_returns: pd.Series, risk_free_rate: float) -> float:
@@ -306,8 +317,17 @@ def rolling_sharpe(
     """
 
     length = PERIODS_DAYS[window]
+    sample_length = len(portfolio_returns)
 
-    rolling_sharpe_df = portfolio_returns.rolling(length).apply(
+    if length > sample_length:
+        console.print(
+            f"[red]Window length ({window}->{length}) is larger than returns length ({sample_length}).\
+            \nTry a smaller window.[/red]"
+        )
+        return pd.DataFrame()
+
+    # max(2, length) -> std needs at least 2 observations
+    rolling_sharpe_df = portfolio_returns.rolling(max(2, length)).apply(
         lambda x: (x.mean() - risk_free_rate) / x.std()
     )
     return rolling_sharpe_df
@@ -354,7 +374,18 @@ def rolling_sortino(
         Rolling sortino ratio DataFrame
     """
     length = PERIODS_DAYS[window]
-    rolling_sortino_df = portfolio_returns.rolling(length).apply(
+
+    sample_length = len(portfolio_returns)
+
+    if length > sample_length:
+        console.print(
+            f"[red]Window length ({window}->{length}) is larger than returns length ({sample_length}).\
+            \nTry a smaller window.[/red]"
+        )
+        return pd.DataFrame()
+
+    # max(2, length) -> std needs at least 2 observations
+    rolling_sortino_df = portfolio_returns.rolling(max(2, length)).apply(
         lambda x: (x.mean() - risk_free_rate) / x[x < 0].std()
     )
 
@@ -386,10 +417,19 @@ def rolling_beta(
 
     length = PERIODS_DAYS[window]
 
+    sample_length = len(portfolio_returns)
+
+    if length > sample_length:
+        console.print(
+            f"[red]Window length ({window}->{length}) is larger than returns length ({sample_length}).\
+            \nTry a smaller window.[/red]"
+        )
+        return pd.DataFrame()
+
     covs = (
         pd.DataFrame({"Portfolio": portfolio_returns, "Benchmark": benchmark_returns})
         .dropna(axis=0)
-        .rolling(max(1, length))
+        .rolling(max(2, length))  # needs at least 2 observations.
         .cov()
         .unstack()
         .dropna()
@@ -1006,7 +1046,7 @@ def get_kelly_criterion(
         if (not period_return.empty) and (not period_portfolio_tr.empty):
             w = len(period_return[period_return > 0]) / len(period_return)
             r = len(
-                period_portfolio_tr[period_portfolio_tr["% Portfolio Return"] > 0]
+                period_portfolio_tr[period_portfolio_tr["Portfolio % Return"] > 0]
             ) / len(
                 period_portfolio_tr[period_portfolio_tr["Type"].str.upper() != "CASH"]
             )
@@ -1046,10 +1086,10 @@ def get_payoff_ratio(portfolio_trades: pd.DataFrame) -> pd.DataFrame:
         period_portfolio_tr = filter_df_by_period(portfolio_trades, period)
         if not portfolio_trades.empty:
             portfolio_wins = period_portfolio_tr[
-                period_portfolio_tr["% Portfolio Return"] > 0
+                period_portfolio_tr["Portfolio % Return"] > 0
             ]
             portfolio_loses = period_portfolio_tr[
-                period_portfolio_tr["% Portfolio Return"] < 0
+                period_portfolio_tr["Portfolio % Return"] < 0
             ]
             if portfolio_loses.empty:
                 vals.append(["-"])
@@ -1100,10 +1140,10 @@ def get_profit_factor(portfolio_trades: pd.DataFrame) -> pd.DataFrame:
         period_portfolio_tr = filter_df_by_period(portfolio_trades, period)
         if not portfolio_trades.empty:
             portfolio_wins = period_portfolio_tr[
-                period_portfolio_tr["% Portfolio Return"] > 0
+                period_portfolio_tr["Portfolio % Return"] > 0
             ]
             portfolio_loses = period_portfolio_tr[
-                period_portfolio_tr["% Portfolio Return"] < 0
+                period_portfolio_tr["Portfolio % Return"] < 0
             ]
             if portfolio_loses.empty:
                 vals.append(["-"])
@@ -1126,3 +1166,41 @@ def get_profit_factor(portfolio_trades: pd.DataFrame) -> pd.DataFrame:
     )
 
     return pf_period_df
+
+
+def get_start_date_from_period(period) -> date:
+    """
+    Returns start date of a time period based on the period string (e.g. 10y, 3m, etc.)
+    """
+    if period == "10y":
+        start_date = date.today() + relativedelta(years=-10)
+    elif period == "5y":
+        start_date = date.today() + relativedelta(years=-5)
+    elif period == "3y":
+        start_date = date.today() + relativedelta(years=-3)
+    elif period == "1y":
+        start_date = date.today() + relativedelta(years=-1)
+    elif period == "6m":
+        start_date = date.today() + relativedelta(months=-6)
+    elif period == "3m":
+        start_date = date.today() + relativedelta(months=-3)
+    elif period == "ytd":
+        start_date = date(date.today().year, 1, 1)
+    elif period == "qtd":
+        cm = date.today().month
+        if 3 >= cm >= 1:
+            start_date = date(date.today().year, 1, 1)
+        elif 6 >= cm >= 4:
+            start_date = date(date.today().year, 4, 1)
+        elif 9 >= cm >= 7:
+            start_date = date(date.today().year, 7, 1)
+        elif 12 >= cm >= 10:
+            start_date = date(date.today().year, 10, 1)
+        else:
+            print("Error")
+    elif period == "mtd":
+        cur_month = date.today().month
+        cur_year = date.today().year
+        start_date = date(cur_year, cur_month, 1)
+
+    return start_date

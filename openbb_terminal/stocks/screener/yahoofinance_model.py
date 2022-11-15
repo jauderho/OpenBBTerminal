@@ -4,6 +4,7 @@ import configparser
 import datetime
 import logging
 from pathlib import Path
+from typing import List, Tuple
 import random
 
 import numpy as np
@@ -16,7 +17,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from openbb_terminal.decorators import log_start_end
 
-from openbb_terminal.core.config.paths import PRESETS_DIRECTORY
+from openbb_terminal.core.config.paths import USER_PRESETS_DIRECTORY
 from openbb_terminal.rich_config import console
 from openbb_terminal.stocks.screener import finviz_model
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 register_matplotlib_converters()
 
-PRESETS_PATH = PRESETS_DIRECTORY / "stocks" / "screener"
+PRESETS_PATH = USER_PRESETS_DIRECTORY / "stocks" / "screener"
 PRESETS_PATH_DEFAULT = Path(__file__).parent / "presets"
 preset_choices = {
     filepath.name: filepath
@@ -57,7 +58,7 @@ def historical(
     ).strftime("%Y-%m-%d"),
     type_candle: str = "a",
     normalize: bool = True,
-):
+) -> Tuple[pd.DataFrame, List[str], bool]:
     """View historical price of stocks that meet preset
 
     Parameters
@@ -89,6 +90,8 @@ def historical(
     else:
         preset_filter = configparser.RawConfigParser()
         preset_filter.optionxform = str  # type: ignore
+        if preset_loaded not in preset_choices:
+            return pd.DataFrame, [], False
         preset_filter.read(preset_choices[preset_loaded])
 
         d_general = preset_filter["General"]

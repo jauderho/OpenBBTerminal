@@ -21,6 +21,7 @@ from scipy.stats import binom
 import openbb_terminal.config_plot as cfp
 from openbb_terminal.config_plot import PLOT_DPI
 from openbb_terminal.config_terminal import theme
+from openbb_terminal.core.config.paths import MISCELLANEOUS_DIRECTORY
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
     excel_columns,
@@ -107,7 +108,7 @@ def display_chains(
         call_bool = False
         put_bool = True
 
-    option_chains = yfinance_model.get_full_option_chain(
+    option_chains = yfinance_model.get_option_chain_expiry(
         symbol=symbol,
         expiry=expiry,
         calls=call_bool,
@@ -696,8 +697,27 @@ def plot_plot(
         x = "strike"
         y = "impliedVolatility"
     else:
-        x = convert[x]
-        y = convert[y]
+        if x is None:
+            console.print("[red]Invalid option sent for x-axis[/red]\n")
+            return
+        if y is None:
+            console.print("[red]Invalid option sent for y-axis[/red]\n")
+            return
+        if x in convert:
+            x = convert[x]
+        else:
+            x = "strike"
+            console.print(
+                f"[red]'{x}' is not a valid option. Defaulting to `strike`.[/red]\n"
+            )
+        if y in convert:
+            y = convert[y]
+        else:
+            y = "impliedVolatility"
+            console.print(
+                f"[red]'{y}' is not a valid option. Defaulting to `impliedVolatility`.[/red]\n"
+            )
+
     varis = op_helpers.opt_chain_cols
     chain = yfinance_model.get_option_chain(symbol, expiry)
     values = chain.puts if put else chain.calls
@@ -1043,12 +1063,12 @@ def export_binomial_calcs(
         for j, _ in enumerate(opt_vals[i]):
             ws[f"{opts[i]}{j+8+days}"] = opt_vals[i][j]
 
-    trypath = os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
-        "exports",
-        "stocks",
-        "options",
-        f"{symbol} {datetime.now()}.xlsx",
+    trypath = str(
+        MISCELLANEOUS_DIRECTORY
+        / "exports"
+        / "stocks"
+        / "options"
+        / f"{symbol} {datetime.now()}.xlsx"
     )
     wb.save(trypath)
     console.print(

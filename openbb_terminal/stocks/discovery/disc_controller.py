@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -20,7 +20,7 @@ from openbb_terminal.helper_funcs import (
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
-from openbb_terminal.rich_config import console, MenuText
+from openbb_terminal.rich_config import console, MenuText, get_ordered_list_sources
 from openbb_terminal.stocks.discovery import (
     ark_view,
     finnhub_view,
@@ -118,16 +118,92 @@ class DiscoveryController(BaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["arkord"]["-s"] = {c: None for c in self.arkord_sortby_choices}
-            choices["arkord"]["--sortby"] = {
-                c: None for c in self.arkord_sortby_choices
+
+            one_to_hundred: dict = {str(c): {} for c in range(1, 100)}
+            choices["pipo"] = {
+                "--days": one_to_hundred,
+                "-d": "--days",
+                "--start": None,
+                "-s": "--start",
+                "--limit": None,
+                "-l": "--limit",
             }
-            choices["arkord"]["--fund"] = {c: None for c in self.arkord_fund_choices}
-            choices["cnews"]["-t"] = {c: None for c in self.cnews_type_choices}
-            choices["cnews"]["--type"] = {c: None for c in self.cnews_type_choices}
-            choices["divcal"]["-s"] = {c: None for c in self.dividend_columns}
-            choices["divcal"]["--sort"] = {c: None for c in self.dividend_columns}
-            choices["heatmap"]["-t"] = {c: None for c in self.heatmap_timeframes}
+            choices["fipo"] = {
+                "--days": one_to_hundred,
+                "-d": "--days",
+                "--end": None,
+                "-e": "--end",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            limit = {
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["gainers"] = limit
+            choices["losers"] = limit
+            choices["ugs"] = limit
+            choices["gtech"] = limit
+            choices["active"] = limit
+            choices["ulc"] = limit
+            choices["asc"] = limit
+            choices["arkord"] = {
+                "--sortby": {c: {} for c in self.arkord_sortby_choices},
+                "-s": "--sortby",
+                "reverse": {},
+                "-r": "reverse",
+                "--buy_only": {},
+                "-b": "--buy_only",
+                "--sell_only": {},
+                "-c": "--sell_only",
+                "--fund": {c: {} for c in self.arkord_fund_choices},
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["upcoming"] = {
+                "--limit": None,
+                "-l": "--limit",
+                "--pages": one_to_hundred,
+                "-p": "--pages",
+            }
+            choices["trending"] = {
+                "--id": None,
+                "-i": "--id",
+                "--limit": None,
+                "-l": "--limit",
+                "--date": None,
+                "-d": "--date",
+            }
+            choices["cnews"] = {
+                "--type": {c: {} for c in self.cnews_type_choices},
+                "-t": "--type",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["lowfloat"] = limit
+            choices["hotpenny"] = {
+                "--limit": None,
+                "-l": "--limit",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}hotpenny")
+                },
+            }
+            choices["rtat"] = limit
+            choices["divcal"] = {
+                "--date": None,
+                "-d": "--date",
+                "--sort": {c: {} for c in self.dividend_columns},
+                "-s": "--sort",
+                "--reverse": {},
+                "-r": "--reverse",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["heatmap"]["--timeframe"] = {
+                c: None for c in self.heatmap_timeframes
+            }
+            choices["heatmap"]["-t"] = "--timeframe"
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -181,12 +257,16 @@ class DiscoveryController(BaseController):
             dest="sort",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
-            default=False,
+            "-r",
+            "--reverse",
             action="store_true",
-            help="Flag to sort in ascending order",
-            dest="ascend",
+            dest="reverse",
+            default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         if other_args and "-" not in other_args[0][0]:
             other_args.insert(0, "-d")
@@ -201,7 +281,7 @@ class DiscoveryController(BaseController):
             nasdaq_view.display_dividend_calendar(
                 date=ns_parser.date.strftime("%Y-%m-%d"),
                 sortby=sort_col,
-                ascend=ns_parser.ascend,
+                ascend=ns_parser.reverse,
                 limit=ns_parser.limit,
                 export=ns_parser.export,
             )
@@ -554,17 +634,21 @@ class DiscoveryController(BaseController):
             "--sortby",
             dest="sort_col",
             choices=self.arkord_sortby_choices,
-            nargs="+",
+            type=str,
             help="Column to sort by",
             default="",
         )
         parser.add_argument(
-            "-a",
-            "--ascend",
-            dest="ascend",
-            help="Flag to sort in ascending order",
+            "-r",
+            "--reverse",
             action="store_true",
+            dest="reverse",
             default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
         )
         parser.add_argument(
             "-b",
@@ -599,7 +683,7 @@ class DiscoveryController(BaseController):
             ark_view.ark_orders_view(
                 limit=ns_parser.limit,
                 sortby=ns_parser.sort_col,
-                ascend=ns_parser.ascend,
+                ascend=ns_parser.reverse,
                 buys_only=ns_parser.buys_only,
                 sells_only=ns_parser.sells_only,
                 fund=ns_parser.fund,

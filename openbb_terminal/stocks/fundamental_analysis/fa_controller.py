@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -15,6 +15,7 @@ from openbb_terminal.helper_funcs import (
     EXPORT_ONLY_RAW_DATA_ALLOWED,
     check_positive,
     valid_date,
+    list_from_str,
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import StockBaseController
@@ -30,6 +31,7 @@ from openbb_terminal.stocks.fundamental_analysis import (
     yahoo_finance_view,
     polygon_view,
     fmp_view,
+    eodhd_view,
 )
 
 # pylint: disable=inconsistent-return-statements,C0302,R0904
@@ -104,18 +106,128 @@ class FundamentalAnalysisController(StockBaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["load"]["-i"] = {c: {} for c in stocks_helper.INTERVALS}
-            choices["load"]["-s"] = {c: {} for c in stocks_helper.SOURCES}
-            choices["income"]["-p"] = {
-                c: {} for c in stocks_helper.INCOME_PLOT[self.default_income]
+
+            one_to_hundred: dict = {str(c): {} for c in range(1, 100)}
+            choices["load"] = {
+                "--ticker": None,
+                "-t": "--ticker",
+                "--start": None,
+                "-s": "--start",
+                "--end": None,
+                "-e": "--end",
+                "--interval": {c: {} for c in ["1", "5", "15", "30", "60"]},
+                "-i": "--interval",
+                "--prepost": {},
+                "-p": "--prepost",
+                "--file": None,
+                "-f": "--file",
+                "--monthly": {},
+                "-m": "--monthly",
+                "--weekly": {},
+                "-w": "--weekly",
+                "--iexrange": {c: {} for c in ["ytd", "1y", "2y", "5y", "6m"]},
+                "-r": "--iexrange",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}load")
+                },
             }
-            choices["balance"]["-p"] = {
-                c: {} for c in stocks_helper.BALANCE_PLOT[self.default_balance]
+            choices["income"] = {
+                "--plot": {
+                    c: {} for c in stocks_helper.INCOME_PLOT[self.default_income]
+                },
+                "-p": "--plot",
+                "--quarter": {},
+                "-q": "--quarter",
+                "--ratios": {},
+                "-r": "--ratios",
+                "--limit": None,
+                "-l": "--limit",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}income")
+                },
             }
-            choices["cash"]["-p"] = {
-                c: {} for c in stocks_helper.CASH_PLOT[self.default_cash]
+            choices["balance"] = {
+                "--plot": {
+                    c: {} for c in stocks_helper.BALANCE_PLOT[self.default_balance]
+                },
+                "-p": "--plot",
+                "--quarter": {},
+                "-q": "--quarter",
+                "--ratios": {},
+                "-r": "--ratios",
+                "--limit": None,
+                "-l": "--limit",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}balance")
+                },
+            }
+            choices["cash"] = {
+                "--plot": {c: {} for c in stocks_helper.CASH_PLOT[self.default_cash]},
+                "-p": "--plot",
+                "--quarter": {},
+                "-q": "--quarter",
+                "--ratios": {},
+                "-r": "--ratios",
+                "--limit": None,
+                "-l": "--limit",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}cash")
+                },
+            }
+            fmp_standard = {
+                "--quarter": {},
+                "-q": "--quarter",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["enterprise"] = fmp_standard
+            choices["metrics"] = fmp_standard
+            choices["ratios"] = fmp_standard
+            choices["growth"] = fmp_standard
+            choices["warnings"] = {"--debug": {}, "-d": "--debug"}
+            choices["dcf"] = {
+                "--prediction": one_to_hundred,
+                "-p": "--prediction",
+                "--similar": None,
+                "-s": "--similar",
+                "--audit": {},
+                "-a": "--audit",
+                "--growth": {},
+                "-g": "--growth",
+                "--no-ratios": {},
+                "--no-filter": {},
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["dcfc"] = fmp_standard
+            choices["mktcap"] = {
+                "--start": None,
+                "-s": "--start",
+            }
+            choices["divs"] = {
+                "--plot": {},
+                "-p": "--plot",
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["earnings"] = {
+                "--quarter": {},
+                "-q": "--quarter",
+                "--limit": None,
+                "-l": "--limit",
+                "--source": {
+                    c: {} for c in get_ordered_list_sources(f"{self.PATH}earnings")
+                },
             }
             choices["shrs"] = {c: {} for c in self.SHRS_CHOICES}
+            choices["fraud"] = {
+                "--explanation": {},
+                "-e": "--explanation",
+                "--detail": {},
+                "-d": "--detail",
+            }
+            choices["dupont"]["--raw"] = {}
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):
@@ -584,7 +696,7 @@ class FundamentalAnalysisController(StockBaseController):
             dest="holder",
         )
 
-        if other_args and "--holder" not in other_args[0][0]:
+        if other_args and "--holder" not in other_args[0][0] and "-h" not in other_args:
             other_args.insert(0, "--holder")
 
         ns_parser = self.parse_known_args_and_warn(
@@ -817,11 +929,10 @@ class FundamentalAnalysisController(StockBaseController):
             "-p",
             "--plot",
             action="store",
-            nargs="+",
             type=str,
             default=None,
             dest="plot",
-            help="Rows to plot. (-1 represents invalid data)",
+            help="Rows to plot, comma separated. (-1 represents invalid data)",
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -830,6 +941,7 @@ class FundamentalAnalysisController(StockBaseController):
             limit=5,
         )
         if ns_parser:
+            ns_parser.plot = list_from_str(ns_parser.plot)
             # TODO: Switch to actually getting data
             if ns_parser.source == "YahooFinance" and ns_parser.b_quarter:
                 console.print(
@@ -872,6 +984,16 @@ class FundamentalAnalysisController(StockBaseController):
                     plot=ns_parser.plot,
                     export=ns_parser.export,
                     limit=ns_parser.limit,
+                )
+            elif ns_parser.source == "EODHD":
+                console.print("Source is EOD Historical Data!")
+                eodhd_view.display_fundamentals(
+                    symbol=self.ticker,
+                    statement="Income_Statement",
+                    quarterly=ns_parser.b_quarter,
+                    ratios=ns_parser.ratios,
+                    plot=ns_parser.plot,
+                    export=ns_parser.export,
                 )
 
     @log_start_end(log=logger)
@@ -918,11 +1040,10 @@ class FundamentalAnalysisController(StockBaseController):
             "-p",
             "--plot",
             action="store",
-            nargs="+",
             type=str,
             default=None,
             dest="plot",
-            help="Rows to plot. (-1 represents invalid data)",
+            help="Rows to plot, comma separated. (-1 represents invalid data)",
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -931,6 +1052,7 @@ class FundamentalAnalysisController(StockBaseController):
             limit=5,
         )
         if ns_parser:
+            ns_parser.plot = list_from_str(ns_parser.plot)
             # TODO: Switch to actually getting data
             if ns_parser.source == "YahooFinance" and ns_parser.b_quarter:
                 text = "Quarterly data currently unavailable for yfinance"
@@ -971,6 +1093,16 @@ class FundamentalAnalysisController(StockBaseController):
                     plot=ns_parser.plot,
                     export=ns_parser.export,
                     limit=ns_parser.limit,
+                )
+            elif ns_parser.source == "EODHD":
+                console.print("Source is EOD Historical Data!")
+                eodhd_view.display_fundamentals(
+                    symbol=self.ticker,
+                    statement="Balance_Sheet",
+                    quarterly=ns_parser.b_quarter,
+                    ratios=ns_parser.ratios,
+                    plot=ns_parser.plot,
+                    export=ns_parser.export,
                 )
 
     @log_start_end(log=logger)
@@ -1024,7 +1156,6 @@ class FundamentalAnalysisController(StockBaseController):
             "-p",
             "--plot",
             action="store",
-            nargs="+",
             type=str,
             default=None,
             dest="plot",
@@ -1036,6 +1167,7 @@ class FundamentalAnalysisController(StockBaseController):
             export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED,
         )
         if ns_parser:
+            ns_parser.plot = list_from_str(ns_parser.plot)
             # TODO: Switch to actually getting data
             if ns_parser.source == "YahooFinance" and ns_parser.b_quarter:
                 text = "Quarterly data currently unavailable for yfinance"
@@ -1076,6 +1208,16 @@ class FundamentalAnalysisController(StockBaseController):
                     plot=ns_parser.plot,
                     export=ns_parser.export,
                     limit=ns_parser.limit,
+                )
+            elif ns_parser.source == "EODHD":
+                console.print("Source is EOD Historical Data!")
+                eodhd_view.display_fundamentals(
+                    symbol=self.ticker,
+                    statement="Cash_Flow",
+                    quarterly=ns_parser.b_quarter,
+                    ratios=ns_parser.ratios,
+                    plot=ns_parser.plot,
+                    export=ns_parser.export,
                 )
 
     @log_start_end(log=logger)

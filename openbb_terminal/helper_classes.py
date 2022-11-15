@@ -7,46 +7,13 @@ import json
 from importlib import machinery, util
 from typing import Union, List, Dict, Optional
 
-import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import font_manager, ticker
 
-from openbb_terminal.core.config.paths import REPOSITORY_DIRECTORY, USER_DATA_DIRECTORY
-
-
-class LineAnnotateDrawer:
-    """Line drawing class."""
-
-    def __init__(self, ax: matplotlib.axes = None):
-        self.ax = ax
-
-    # pylint: disable=import-outside-toplevel
-    def draw_lines_and_annotate(self):
-        """Draw lines."""
-        from openbb_terminal.rich_config import console
-
-        console.print(
-            "Click twice for annotation.\nClose window to keep using terminal.\n"
-        )
-
-        while True:
-            xy = plt.ginput(2)
-            # Check whether the user has closed the window or not
-            if not plt.get_fignums():
-                console.print("")
-                return
-
-            if len(xy) == 2:
-                x = [p[0] for p in xy]
-                y = [p[1] for p in xy]
-
-                if (x[0] == x[1]) and (y[0] == y[1]):
-                    txt = input("Annotation: ")
-                    self.ax.annotate(txt, (x[0], y[1]), ha="center", va="center")
-                else:
-                    self.ax.plot(x, y)
-
-                self.ax.figure.canvas.draw()
+from openbb_terminal.core.config.paths import (
+    MISCELLANEOUS_DIRECTORY,
+    USER_DATA_DIRECTORY,
+)
 
 
 # pylint: disable=too-few-public-methods
@@ -99,8 +66,8 @@ class TerminalStyle:
     styles as python dictionaries.
     """
 
-    DEFAULT_STYLES_LOCATION = REPOSITORY_DIRECTORY / "styles" / "default"
-    USER_STYLES_LOCATION = USER_DATA_DIRECTORY / "styles"
+    DEFAULT_STYLES_LOCATION = MISCELLANEOUS_DIRECTORY / "styles" / "default"
+    USER_STYLES_LOCATION = USER_DATA_DIRECTORY / "styles" / "user"
 
     mpl_styles_available: Dict[str, str] = {}
     mpl_style: str = ""
@@ -174,7 +141,10 @@ class TerminalStyle:
                 self.mpf_style = json.load(stylesheet)
             self.mpf_style["base_mpl_style"] = self.mpl_style
 
-        if console_style in self.console_styles_available:
+        if "openbb_config" in self.console_styles_available:
+            with open(self.console_styles_available["openbb_config"]) as stylesheet:
+                self.console_style = json.load(stylesheet)
+        elif console_style in self.console_styles_available:
             with open(self.console_styles_available[console_style]) as stylesheet:
                 self.console_style = json.load(stylesheet)
         else:

@@ -5,7 +5,7 @@ import argparse
 import logging
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
@@ -36,6 +36,19 @@ class DiscoveryController(BaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
+
+            choices["gainers"] = {
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["decliners"] = {
+                "--limit": None,
+                "-l": "--limit",
+            }
+            choices["active"] = {
+                "--limit": None,
+                "-l": "--limit",
+            }
 
             choices["support"] = self.SUPPORT_CHOICES
             choices["about"] = self.ABOUT_CHOICES

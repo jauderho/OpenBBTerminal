@@ -1,7 +1,6 @@
 """ EconDB View """
 __docformat__ = "numpy"
 # pylint:disable=too-many-arguments
-from datetime import datetime
 import logging
 import os
 from textwrap import fill
@@ -28,7 +27,7 @@ def show_macro_data(
     countries: list = None,
     transform: str = "",
     start_date: str = "1900-01-01",
-    end_date: str = str(datetime.today().date()),
+    end_date: str = None,
     symbol: str = "",
     raw: bool = False,
     external_axes: Optional[List[plt.axes]] = None,
@@ -109,7 +108,7 @@ def show_macro_data(
 
     if len(parameters) > 1 or len(countries) > 1:
         ax.legend(
-            [fill(label, 45) for label in legend],
+            [fill(label.title(), 45) for label in legend],
             bbox_to_anchor=(0, 0.40, 1, -0.52),
             loc="upper right",
             mode="expand",
@@ -148,7 +147,7 @@ def show_treasuries(
     maturities: list = None,
     frequency: str = "monthly",
     start_date: str = "1900-01-01",
-    end_date: str = str(datetime.today().date()),
+    end_date: str = None,
     raw: bool = False,
     external_axes: Optional[List[plt.axes]] = None,
     export: str = "",

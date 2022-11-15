@@ -6,31 +6,39 @@ import pandas as pd
 import requests
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FINNHUB_KEY"])
 def get_ipo_calendar(
-    start_date: str = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d"),
-    end_date: str = datetime.now().strftime("%Y-%m-%d"),
+    start_date: str = None,
+    end_date: str = None,
 ) -> pd.DataFrame:
     """Get IPO calendar
 
     Parameters
     ----------
     start_date : str
-        start date (%Y-%m-%d) to get IPO calendar
+        Initial date, format YYYY-MM-DD
     end_date : str
-        end date (%Y-%m-%d) to get IPO calendar
+        Final date, format YYYY-MM-DD
 
     Returns
     -------
     pd.DataFrame
-        Get dataframe with economic calendar events
+        Get dataframe with IPO calendar events
     """
+
+    if start_date is None:
+        start_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
     response = requests.get(
         f"https://finnhub.io/api/v1/calendar/ipo?from={start_date}&to={end_date}&token={cfg.API_FINNHUB_KEY}"
     )
@@ -63,6 +71,7 @@ def get_ipo_calendar(
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_FINNHUB_KEY"])
 def get_past_ipo(
     num_days_behind: int = 5,
     start_date: Optional[str] = None,

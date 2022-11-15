@@ -3,11 +3,11 @@ import json
 import os
 import pathlib
 from typing import Any, Dict, List, Optional, Type
-from distutils.util import strtobool
 
 # IMPORTATION THIRDPARTY
+import matplotlib
 import pandas as pd
-import pkg_resources
+import importlib_metadata
 import pytest
 from _pytest.capture import MultiCapture, SysCapture
 from _pytest.config import Config
@@ -18,6 +18,7 @@ from _pytest.mark.structures import Mark
 # IMPORTATION INTERNAL
 from openbb_terminal import decorators, helper_funcs
 from openbb_terminal import feature_flags as obbff
+from openbb_terminal.base_helpers import strtobool
 
 # pylint: disable=redefined-outer-name
 
@@ -30,8 +31,6 @@ EXTENSIONS_MATCHING: Dict[str, List[Type]] = {
 }
 
 os.environ["TEST_MODE"] = "True"
-os.environ["OPENBB_IMG_HOST_ACTIVE"] = "False"
-os.environ["OPENBB_IMGUR_CLIENT_ID"] = "123"
 obbff.ENABLE_EXIT_AUTO_HELP = strtobool("True")
 
 
@@ -338,8 +337,7 @@ def pytest_addoption(parser: Parser):
 
 
 def brotli_check():
-    installed_packages = pkg_resources.working_set
-    for item in list(installed_packages):
+    for item in importlib_metadata.packages_distributions():
         if "brotli" in str(item).lower():
             pytest.exit("Uninstall brotli and brotlipy before running tests")
 
@@ -349,6 +347,11 @@ def disable_rich():
         print(df.to_string())
 
     helper_funcs.print_rich_table = effect
+
+
+def disable_matplotlib():
+    # We add this to avoid multiple figures being opened
+    matplotlib.use("Agg")
 
 
 def disable_check_api():
@@ -366,6 +369,7 @@ def pytest_configure(config: Config) -> None:
     enable_debug()
     disable_rich()
     disable_check_api()
+    disable_matplotlib()
 
 
 @pytest.fixture(scope="session")  # type: ignore

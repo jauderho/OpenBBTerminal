@@ -8,7 +8,7 @@ import pandas as pd
 import requests
 
 from openbb_terminal import config_terminal as cfg
-from openbb_terminal.decorators import log_start_end
+from openbb_terminal.decorators import check_api_key, log_start_end
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ default_columns = [
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_TRADIER_TOKEN"])
 def get_historical_options(
     symbol: str,
     expiry: str,
@@ -90,7 +91,7 @@ def get_historical_options(
         "https://sandbox.tradier.com/v1/markets/history",
         params={"symbol": {symbol}, "interval": "daily"},
         headers={
-            "Authorization": f"Bearer {cfg.TRADIER_TOKEN}",
+            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )
@@ -112,8 +113,56 @@ def get_historical_options(
 
 # pylint: disable=no-else-return
 
+option_cols = [
+    "strike",
+    "bid",
+    "ask",
+    "volume",
+    "open_interest",
+    "mid_iv",
+]
+
+option_col_map = {"open_interest": "openinterest", "mid_iv": "iv"}
+
 
 @log_start_end(log=logger)
+@check_api_key(["API_TRADIER_TOKEN"])
+def get_full_option_chain(symbol: str) -> pd.DataFrame:
+    """Get available expiration dates for given ticker
+
+    Parameters
+    ----------
+    symbol: str
+        Ticker symbol to get expirations for
+
+    Returns
+    -------
+    pd.DataFrame
+       Dataframe of all option chains
+    """
+
+    expirations = option_expirations(symbol)
+
+    options = pd.DataFrame()
+
+    for date in expirations:
+        temp = get_option_chains(symbol, date)
+        calls = temp[temp.option_type == "call"][option_cols].rename(
+            columns=option_col_map
+        )
+        puts = temp[temp.option_type == "put"][option_cols].rename(
+            columns=option_col_map
+        )
+        temp = pd.merge(calls, puts, how="outer", on="strike", suffixes=("_c", "_p"))
+        temp["expiration"] = date
+
+        options = pd.concat([options, temp], axis=0)
+
+    return options
+
+
+@log_start_end(log=logger)
+@check_api_key(["API_TRADIER_TOKEN"])
 def option_expirations(symbol: str) -> List[str]:
     """Get available expiration dates for given ticker
 
@@ -131,7 +180,7 @@ def option_expirations(symbol: str) -> List[str]:
         "https://sandbox.tradier.com/v1/markets/options/expirations",
         params={"symbol": symbol, "includeAllRoots": "true", "strikes": "false"},
         headers={
-            "Authorization": f"Bearer {cfg.TRADIER_TOKEN}",
+            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )
@@ -149,6 +198,7 @@ def option_expirations(symbol: str) -> List[str]:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_TRADIER_TOKEN"])
 def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
     """Display option chains [Source: Tradier]"
 
@@ -167,7 +217,7 @@ def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
     params = {"symbol": symbol, "expiration": expiry, "greeks": "true"}
 
     headers = {
-        "Authorization": f"Bearer {cfg.TRADIER_TOKEN}",
+        "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
         "Accept": "application/json",
     }
 
@@ -177,7 +227,7 @@ def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
         headers=headers,
     )
     if response.status_code != 200:
-        console.print("Error in request. Check TRADIER_TOKEN\n")
+        console.print("Error in request. Check API_TRADIER_TOKEN\n")
         return pd.DataFrame()
 
     chains = process_chains(response)
@@ -222,6 +272,7 @@ def process_chains(response: requests.models.Response) -> pd.DataFrame:
 
 
 @log_start_end(log=logger)
+@check_api_key(["API_TRADIER_TOKEN"])
 def last_price(symbol: str):
     """Makes api request for last price
 
@@ -239,7 +290,7 @@ def last_price(symbol: str):
         "https://sandbox.tradier.com/v1/markets/quotes",
         params={"symbols": symbol, "includeAllRoots": "true", "strikes": "false"},
         headers={
-            "Authorization": f"Bearer {cfg.TRADIER_TOKEN}",
+            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )

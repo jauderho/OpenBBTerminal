@@ -5,16 +5,15 @@ import argparse
 import logging
 from typing import List
 
-from prompt_toolkit.completion import NestedCompleter
-
 from openbb_terminal import feature_flags as obbff
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import EXPORT_ONLY_RAW_DATA_ALLOWED, check_positive
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
 from openbb_terminal.rich_config import MenuText, console
 from openbb_terminal.stocks.comparison_analysis import ca_controller
-from openbb_terminal.stocks.options.screen import syncretism_view, syncretism_model
+from openbb_terminal.stocks.options.screen import syncretism_model, syncretism_view
 
 # pylint: disable=E1121
 
@@ -43,8 +42,13 @@ class ScreenerController(BaseController):
 
         if session and obbff.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["view"] = {c: None for c in self.preset_choices}
-            choices["set"] = {c: None for c in self.preset_choices}
+            presets: dict = {c: {} for c in self.preset_choices}
+            choices["view"] = presets
+            choices["set"] = presets
+            choices["scr"] = presets
+            choices["scr"]["--limit"] = None
+            choices["scr"]["-l"] = "--limit"
+
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def print_help(self):

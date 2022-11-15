@@ -8,8 +8,9 @@ from datetime import datetime, timedelta
 from typing import List
 
 import pandas as pd
-from prompt_toolkit.completion import NestedCompleter
 
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
+from openbb_terminal.common.quantitative_analysis import qa_view
 from openbb_terminal import feature_flags as obbff
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.forex import forex_helper, fxempire_view, av_view
@@ -17,15 +18,16 @@ from openbb_terminal.forex.forex_helper import FOREX_SOURCES, SOURCES_INTERVALS
 from openbb_terminal.helper_funcs import (
     valid_date,
     EXPORT_ONLY_RAW_DATA_ALLOWED,
+    export_data,
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
 from openbb_terminal.rich_config import (
     console,
     MenuText,
-    translate,
     get_ordered_list_sources,
 )
+from openbb_terminal.stocks import stocks_helper
 from openbb_terminal.decorators import check_api_key
 from openbb_terminal.forex.forex_helper import parse_forex_symbol
 
@@ -43,8 +45,18 @@ FX_TICKERS = pd.read_csv(forex_data_path).iloc[:, 0].to_list()
 class ForexController(BaseController):
     """Forex Controller class."""
 
-    CHOICES_COMMANDS = ["load", "quote", "candle", "resources", "fwd"]
-    CHOICES_MENUS = ["ta", "qa", "Oanda", "pred"]
+    CHOICES_COMMANDS = [
+        "load",
+        "quote",
+        "candle",
+        "resources",
+        "fwd",
+        "forecast",
+        "oanda",
+    ]
+    CHOICES_MENUS = ["ta", "qa", "Oanda"]
+    RESOLUTION = ["i", "d", "w", "m"]
+
     PATH = "/forex/"
     FILE_PATH = os.path.join(os.path.dirname(__file__), "README.md")
 
@@ -59,10 +71,37 @@ class ForexController(BaseController):
         self.data = pd.DataFrame()
 
         if session and obbff.USE_PROMPT_TOOLKIT:
+            one_to_hundred: dict = {str(c): {} for c in range(1, 100)}
+
             choices: dict = {c: {} for c in self.controller_choices}
-            choices["load"]["--source"] = {c: None for c in FOREX_SOURCES}
-            choices["load"] = {c: None for c in FX_TICKERS}
-            choices["load"]["-t"] = {c: None for c in FX_TICKERS}
+            choices["load"] = {c: {} for c in FX_TICKERS}
+            choices["load"]["--ticker"] = {c: {} for c in FX_TICKERS}
+            choices["load"]["-t"] = "--ticker"
+            choices["load"]["--resolution"] = {c: {} for c in self.RESOLUTION}
+            choices["load"]["-r"] = "--resolution"
+            choices["load"]["--interval"] = {
+                c: {} for c in SOURCES_INTERVALS["YahooFinance"]
+            }
+            choices["load"]["--start"] = None
+            choices["load"]["-s"] = "--start"
+            choices["load"]["--source"] = {c: {} for c in FOREX_SOURCES}
+            choices["quote"]["--source"] = {
+                c: {} for c in get_ordered_list_sources(f"{self.PATH}quote")
+            }
+            choices["candle"] = {
+                "--sort": {c: {} for c in forex_helper.CANDLE_SORT},
+                "--plotly": {},
+                "-p": "--plotly",
+                "--reverse": {},
+                "-r": "--reverse",
+                "--raw": {},
+                "--trend": {},
+                "-t": "--trend",
+                "--ma": None,
+                "--limit": one_to_hundred,
+                "-l": "--limit",
+            }
+
             choices["support"] = self.SUPPORT_CHOICES
             choices["about"] = self.ABOUT_CHOICES
 
@@ -77,13 +116,12 @@ class ForexController(BaseController):
         mt.add_param("_source", FOREX_SOURCES[self.source])
         mt.add_raw("\n")
         mt.add_cmd("quote", self.fx_pair)
-        mt.add_cmd("load", self.fx_pair)
         mt.add_cmd("candle", self.fx_pair)
         mt.add_cmd("fwd", self.fx_pair)
         mt.add_raw("\n")
         mt.add_menu("ta", self.fx_pair)
         mt.add_menu("qa", self.fx_pair)
-        mt.add_menu("pred", self.fx_pair)
+        mt.add_menu("forecast")
         mt.add_raw("\n")
         mt.add_info("forex")
         mt.add_menu("oanda")
@@ -117,7 +155,7 @@ class ForexController(BaseController):
         parser.add_argument(
             "-r",
             "--resolution",
-            choices=["i", "d", "w", "m"],
+            choices=self.RESOLUTION,
             default="d",
             help="[Alphavantage only] Resolution of data. Can be intraday, daily, weekly or monthly",
             dest="resolution",
@@ -129,7 +167,7 @@ class ForexController(BaseController):
             default="1day",
             help="""Interval of intraday data. Options:
             [YahooFinance] 1min, 2min, 5min, 15min, 30min, 60min, 90min, 1hour, 1day, 5day, 1week, 1month, 3month.
-            [AlphaAdvantage] 1min, 5min, 15min, 30min, 60min""",
+            [AlphaVantage] 1min, 5min, 15min, 30min, 60min""",
             dest="interval",
         )
         parser.add_argument(
@@ -145,8 +183,7 @@ class ForexController(BaseController):
             other_args.insert(0, "-t")
 
         ns_parser = self.parse_known_args_and_warn(
-            parser,
-            other_args,
+            parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
         )
 
         if ns_parser:
@@ -179,16 +216,23 @@ class ForexController(BaseController):
                 else:
                     self.data.index.name = "date"
 
-                self.source = ns_parser.source
+                export_data(
+                    ns_parser.export,
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "load",
+                    self.data.copy(),
+                )
 
-                console.print(f"{self.from_symbol}-{self.to_symbol} loaded.\n")
+                self.source = ns_parser.source
+                if self.source != "YahooFinance":
+                    console.print(f"{self.from_symbol}-{self.to_symbol} loaded.\n")
             else:
 
-                console.print("\n[red]Make sure to loa.[/red]\n")
+                console.print("\n[red]Make sure to load.[/red]\n")
 
     @log_start_end(log=logger)
     def call_candle(self, other_args: List[str]):
-        """Process quote command."""
+        """Process candle command."""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -196,36 +240,127 @@ class ForexController(BaseController):
             description="Show candle for loaded fx data",
         )
         parser.add_argument(
+            "-p",
+            "--plotly",
+            dest="plotly",
+            action="store_false",
+            default=True,
+            help="Flag to show interactive plotly chart",
+        )
+        parser.add_argument(
+            "--sort",
+            choices=forex_helper.CANDLE_SORT,
+            default="",
+            type=str.lower,
+            dest="sort",
+            help="Choose a column to sort by. Only works when raw data is displayed.",
+        )
+        parser.add_argument(
+            "-r",
+            "--reverse",
+            action="store_true",
+            dest="reverse",
+            default=False,
+            help=(
+                "Data is sorted in descending order by default. "
+                "Reverse flag will sort it in an ascending way. "
+                "Only works when raw data is displayed."
+            ),
+        )
+        parser.add_argument(
+            "--raw",
+            action="store_true",
+            dest="raw",
+            default=False,
+            help="Shows raw data instead of chart.",
+        )
+        parser.add_argument(
+            "-t",
+            "--trend",
+            action="store_true",
+            default=False,
+            help="Flag to add high and low trends to candle",
+            dest="trendlines",
+        )
+        parser.add_argument(
             "--ma",
             dest="mov_avg",
             type=str,
-            help=translate("stocks/CANDLE_mov_avg"),
+            help=(
+                "Add moving average in number of days to plot and separate by a comma. "
+                "Value for ma (moving average) keyword needs to be greater than 1."
+            ),
             default=None,
         )
-        ns_parser = self.parse_known_args_and_warn(parser, other_args)
+        parser.add_argument(
+            "--log",
+            help="Plot with y axis on log scale",
+            action="store_true",
+            default=False,
+            dest="logy",
+        )
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser,
+            other_args,
+            EXPORT_ONLY_RAW_DATA_ALLOWED,
+            limit=20,
+        )
+
         if ns_parser:
-            mov_avgs = []
-            if not self.data.empty:
+            if not self.to_symbol:
+                console.print("No ticker loaded. First use 'load <ticker>'")
+                return
+
+            data = stocks_helper.process_candle(self.data)
+            if ns_parser.raw:
+                if ns_parser.trendlines:
+                    if (data.index[1] - data.index[0]).total_seconds() >= 86400:
+                        data = stocks_helper.find_trendline(data, "OC_High", "high")
+                        data = stocks_helper.find_trendline(data, "OC_Low", "low")
+
+                qa_view.display_raw(
+                    data=data,
+                    sortby=ns_parser.sort,
+                    ascend=ns_parser.reverse,
+                    limit=ns_parser.limit,
+                )
+
+            else:
+                mov_avgs = []
+
                 if ns_parser.mov_avg:
                     mov_list = (num for num in ns_parser.mov_avg.split(","))
 
                     for num in mov_list:
                         try:
-                            mov_avgs.append(int(num))
+                            num = int(num)
+
+                            if num <= 1:
+                                raise ValueError
+
+                            mov_avgs.append(num)
                         except ValueError:
                             console.print(
-                                f"{num} is not a valid moving average, must be integer"
+                                f"[red]{num} is not a valid moving average, must be an integer greater than 1."
                             )
+
                 forex_helper.display_candle(
-                    self.data, self.to_symbol, self.from_symbol, mov_avgs
+                    to_symbol=self.to_symbol,
+                    from_symbol=self.from_symbol,
+                    data=data,
+                    use_matplotlib=ns_parser.plotly,
+                    add_trend=ns_parser.trendlines,
+                    ma=mov_avgs,
+                    yscale="log" if ns_parser.logy else "linear",
                 )
-            else:
-                logger.error(
-                    "No forex historical data loaded.  Load first using <load>."
-                )
-                console.print(
-                    "[red]No forex historical data loaded.  Load first using <load>.[/red]\n"
-                )
+
+            export_data(
+                ns_parser.export,
+                os.path.dirname(os.path.abspath(__file__)),
+                f"{self.fx_pair}",
+                self.data,
+            )
 
     @log_start_end(log=logger)
     def call_quote(self, other_args: List[str]):
@@ -294,14 +429,7 @@ class ForexController(BaseController):
         """Enter Oanda menu."""
         from openbb_terminal.forex.oanda.oanda_controller import OandaController
 
-        # if self.to_symbol and self.from_symbol:
-
-        self.queue = self.load_class(
-            OandaController,
-            queue=self.queue,
-        )
-        # else:
-        #     console.print("No currency pair data is loaded. Use 'load' to load data.\n")
+        self.queue = self.load_class(OandaController, queue=self.queue)
 
     @log_start_end(log=logger)
     def call_ta(self, _):
@@ -326,49 +454,6 @@ class ForexController(BaseController):
             console.print("No currency pair data is loaded. Use 'load' to load data.\n")
 
     @log_start_end(log=logger)
-    def call_pred(self, _):
-        """Process pred command"""
-        # IMPORTANT: 8/11/22 prediction was discontinued on the installer packages
-        # because forecasting in coming out soon.
-        # This if statement disallows installer package users from using 'pred'
-        # even if they turn on the OPENBB_ENABLE_PREDICT feature flag to true
-        # however it does not prevent users who clone the repo from using it
-        # if they have ENABLE_PREDICT set to true.
-        if obbff.PACKAGED_APPLICATION or not obbff.ENABLE_PREDICT:
-            console.print(
-                "Predict is disabled. Forecasting coming soon!",
-                "\n",
-            )
-        else:
-            if self.from_symbol and self.to_symbol:
-                if self.data.empty:
-                    console.print(
-                        "No currency pair data is loaded. Use 'load' to load data.\n"
-                    )
-                else:
-                    try:
-                        from openbb_terminal.forex.prediction_techniques import (
-                            pred_controller,
-                        )
-
-                        self.queue = self.load_class(
-                            pred_controller.PredictionTechniquesController,
-                            self.from_symbol,
-                            self.to_symbol,
-                            self.data.index[0],
-                            "1440min",
-                            self.data,
-                            self.queue,
-                        )
-                    except ImportError:
-                        logger.exception("Tensorflow not available")
-                        console.print(
-                            "[red]Run pip install tensorflow to continue[/red]\n"
-                        )
-            else:
-                console.print("No pair selected.\n")
-
-    @log_start_end(log=logger)
     def call_qa(self, _):
         """Process qa command"""
         if self.from_symbol and self.to_symbol:
@@ -389,10 +474,14 @@ class ForexController(BaseController):
         else:
             console.print("No pair selected.\n")
 
-    # HELP WANTED!
-    # TODO: Add news and reddit commands back
-    # behavioural analysis and exploratory data analysis would be useful in the
-    # forex menu. The examples of integration of the common ba and eda components
-    # into the stocks context can provide an insight on how this can be done.
-    # The earlier implementation did not work and was deleted in commit
-    # d0e51033f7d5d4da6386b9e0b787892979924dce
+    @log_start_end(log=logger)
+    def call_forecast(self, _):
+        """Process forecast command"""
+        from openbb_terminal.forecast import forecast_controller
+
+        self.queue = self.load_class(
+            forecast_controller.ForecastController,
+            self.fx_pair,
+            self.data,
+            self.queue,
+        )

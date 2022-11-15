@@ -420,7 +420,7 @@ def test_call_func_expect_queue(expected_queue, func, mocker, queue):
             [
                 "1",
                 "--sortby=Vol",
-                "--ascending",
+                "--reverse",
                 "--puts_only",
                 "--calls_only",
                 "--export=csv",
@@ -434,7 +434,7 @@ def test_call_func_expect_queue(expected_queue, func, mocker, queue):
             [
                 "1",
                 "--sortby=Vol",
-                "--ascending",
+                "--reverse",
                 "--puts_only",
                 # "--calls_only",
                 "--export=csv",
@@ -874,10 +874,10 @@ def test_call_func(
 ):
     path_controller = "openbb_terminal.stocks.options.options_controller"
 
-    # MOCK TRADIER_TOKEN
+    # MOCK API_TRADIER_TOKEN
     mocker.patch.object(
         target=options_controller,
-        attribute="TRADIER_TOKEN",
+        attribute="API_TRADIER_TOKEN",
         new="MOCK_TRADIER_TOKEN",
     )
 
