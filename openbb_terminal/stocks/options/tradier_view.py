@@ -236,7 +236,10 @@ def display_chains(
             for col in chain_table.columns
         ]
         print_rich_table(
-            chain_table, headers=headers, show_index=False, title="Option chain"
+            chain_table,
+            headers=headers,
+            show_index=False,
+            title=f"{symbol} Option chain for {expiry}",
         )
 
     export_data(
@@ -317,7 +320,7 @@ def plot_oi(
     if not puts_only:
         ax.plot(call_oi.index, call_oi.values, "-o", label="Calls")
 
-    ax.legend(loc=0)
+    ax.legend(loc=0, fontsize="x-small")
     ax.axvline(current_price, lw=2, ls="--", label="Current Price", alpha=0.7)
     ax.axvline(max_pain, lw=3, label=f"Max Pain: {max_pain}", alpha=0.7)
     ax.set_xlabel("Strike Price")
@@ -608,7 +611,7 @@ def plot_volume_open_interest(
         f"Max pain = {max_pain}",
     ]
 
-    ax.legend(handles=handles[:], labels=labels, loc="lower left")
+    ax.legend(fontsize="xx-small", handles=handles[:], labels=labels, loc="lower left")
     sns.despine(left=True, bottom=True)
     theme.style_primary_axis(ax)
 

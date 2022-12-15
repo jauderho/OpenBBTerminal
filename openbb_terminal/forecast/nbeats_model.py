@@ -13,6 +13,7 @@ from darts.models import NBEATSModel
 from openbb_terminal.decorators import log_start_end
 
 from openbb_terminal.forecast import helpers
+from openbb_terminal.core.config.paths import USER_FORECAST_MODELS_DIRECTORY
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def get_NBEATS_data(
     num_layers: int = 4,
     layer_widths: int = 512,
     batch_size: int = 800,
-    n_epochs: int = 100,
+    n_epochs: int = 300,
     learning_rate: float = 1e-3,
     model_save_name: str = "nbeats_model",
     force_reset: bool = True,
@@ -135,6 +136,8 @@ def get_NBEATS_data(
         save_checkpoints=save_checkpoints,
         random_state=42,
         pl_trainer_kwargs=helpers.get_pl_kwargs(accelerator="cpu"),
+        log_tensorboard=True,
+        work_dir=USER_FORECAST_MODELS_DIRECTORY,
     )
 
     # fit model on train series for historical forecasting
@@ -147,7 +150,11 @@ def get_NBEATS_data(
             past_covariate_train,
             past_covariate_val,
         )
-    best_model = NBEATSModel.load_from_checkpoint(model_name=model_save_name, best=True)
+    best_model = NBEATSModel.load_from_checkpoint(
+        model_name=model_save_name, best=True, work_dir=USER_FORECAST_MODELS_DIRECTORY
+    )
+
+    helpers.print_tensorboard_logs(model_save_name, USER_FORECAST_MODELS_DIRECTORY)
 
     # Showing historical backtesting without retraining model (too slow)
     return helpers.get_prediction(
