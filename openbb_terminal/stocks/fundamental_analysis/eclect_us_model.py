@@ -3,10 +3,10 @@ __docformat__ = "numpy"
 
 import logging
 
-import requests
 import pandas as pd
 
 from openbb_terminal.decorators import log_start_end
+from openbb_terminal.helper_funcs import request
 
 # pylint: disable=R1718
 
@@ -29,7 +29,7 @@ def get_filings_analysis(symbol: str) -> pd.DataFrame:
         Analysis of filings text
     """
 
-    response = requests.get(f"https://api.eclect.us/symbol/{symbol.lower()}?page=1")
+    response = request(f"https://api.eclect.us/symbol/{symbol.lower()}?page=1")
 
     if response.status_code != 200:
         return pd.DataFrame()
@@ -46,10 +46,25 @@ def get_filings_analysis(symbol: str) -> pd.DataFrame:
 
         return resultMapper
 
+    if len(response_dict) == 0:
+        return pd.DataFrame()
+
     risk = pd.DataFrame(
         map(resultGroupMapper("Risk factors"), response_dict[0]["rf_highlights"]),
         columns=["Group", "Good", "Sentence"],
     )
+
+    if risk.empty:
+        response_dict_rf = [x for x in response_dict if x["rf_highlights"] != []]
+        if response_dict_rf != []:
+            risk = pd.DataFrame(
+                map(
+                    resultGroupMapper("Risk factors"),
+                    response_dict_rf[0]["rf_highlights"],
+                ),
+                columns=["Group", "Good", "Sentence"],
+            )
+
     analysis = pd.DataFrame(
         map(
             resultGroupMapper("Discussion and Analysis"),

@@ -3,6 +3,7 @@ __docformat__ = "numpy"
 
 import logging
 import os
+from typing import Optional
 
 import openbb_terminal.cryptocurrency.discovery.coinpaprika_model as paprika
 from openbb_terminal.decorators import log_start_end
@@ -20,6 +21,7 @@ def display_search_results(
     sortby: str = "id",
     ascend: bool = True,
     export: str = "",
+    sheet_name: Optional[str] = None,
 ) -> None:
     """Prints table showing Search over CoinPaprika. [Source: CoinPaprika]
 
@@ -54,10 +56,12 @@ def display_search_results(
         return
 
     print_rich_table(
-        df.head(limit),
+        df,
         headers=list(df.columns),
         show_index=False,
         title="CoinPaprika Results",
+        export=bool(export),
+        limit=limit,
     )
 
     export_data(
@@ -65,4 +69,5 @@ def display_search_results(
         os.path.dirname(os.path.abspath(__file__)),
         "search",
         df,
+        sheet_name,
     )

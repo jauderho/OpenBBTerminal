@@ -1,27 +1,24 @@
 """Econometrics Controller Module"""
 __docformat__ = "numpy"
 
-# pylint: disable=too-many-lines, too-many-branches, inconsistent-return-statements
+# pylint: disable=too-many-arguments,too-many-lines,too-many-branches,inconsistent-return-statements,R0904
 
 import argparse
 import logging
 import os
 from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from openbb_terminal import feature_flags as obbff
 from openbb_terminal.common import common_model
-from openbb_terminal.core.config.paths import (
-    USER_CUSTOM_IMPORTS_DIRECTORY,
-    USER_EXPORTS_DIRECTORY,
-)
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.econometrics import (
+    econometrics_helpers,
     econometrics_model,
     econometrics_view,
     regression_model,
@@ -58,12 +55,16 @@ class EconometricsController(BaseController):
         "show",
         "type",
         "desc",
+        "corr",
+        "season",
         "index",
         "clean",
         "add",
+        "eval",
         "delete",
         "combine",
         "rename",
+        "lag",
         "ols",
         "norm",
         "root",
@@ -108,7 +109,7 @@ class EconometricsController(BaseController):
     loaded_dataset_cols = "\n"
     list_dataset_cols: List = list()
 
-    def __init__(self, queue: List[str] = None):
+    def __init__(self, queue: Optional[List[str]] = None):
         """Constructor"""
         super().__init__(queue)
         self.files: List[str] = list()
@@ -116,6 +117,8 @@ class EconometricsController(BaseController):
         self.regression: Dict[Any[Dict, Any], Any] = dict()
 
         self.DATA_TYPES: List[str] = ["int", "float", "str", "bool", "category", "date"]
+
+        current_user = get_current_user()
 
         for regression in [
             "OLS",
@@ -147,23 +150,27 @@ class EconometricsController(BaseController):
             filepath.name: filepath
             for file_type in common_model.file_types
             for filepath in chain(
-                Path(USER_EXPORTS_DIRECTORY).rglob(f"*.{file_type}"),
-                Path(USER_CUSTOM_IMPORTS_DIRECTORY / "econometrics").rglob(
+                Path(current_user.preferences.USER_EXPORTS_DIRECTORY).rglob(
                     f"*.{file_type}"
                 ),
+                Path(
+                    current_user.preferences.USER_CUSTOM_IMPORTS_DIRECTORY
+                    / "econometrics"
+                ).rglob(f"*.{file_type}"),
             )
             if filepath.is_file()
         }
 
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
             choices["load"] = {
-                "--file": {c: {} for c in self.DATA_FILES.keys()},
+                "--file": {c: {} for c in self.DATA_FILES},
                 "-f": "--file",
                 "-alias": None,
                 "-a": "-alias",
                 "--examples": None,
                 "-e": "--examples",
+                "--sheet-name": None,
             }
 
             for feature in ["export", "show", "desc", "clear", "index"]:
@@ -176,10 +183,13 @@ class EconometricsController(BaseController):
                 "root",
                 "granger",
                 "coint",
+                "corr",
+                "season",
+                "lag",
             ]:
                 choices[feature] = dict()
 
-            # Inititialzie this for regressions to be able to use -h flag
+            # Initialize this for regressions to be able to use -h flag
             choices["regressions"] = {}
             self.choices = choices
 
@@ -189,7 +199,7 @@ class EconometricsController(BaseController):
             self.completer = NestedCompleter.from_nested_dict(choices)
 
     def update_runtime_choices(self):
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             dataset_columns = {
                 f"{dataset}.{column}": {}
                 for dataset, dataframe in self.datasets.items()
@@ -201,6 +211,8 @@ class EconometricsController(BaseController):
                 "norm",
                 "root",
                 "coint",
+                "season",
+                "lag",
                 "regressions",
                 "ols",
                 "panel",
@@ -215,6 +227,7 @@ class EconometricsController(BaseController):
                 "remove",
                 "combine",
                 "rename",
+                "corr",
             ]:
                 self.choices[feature] = {c: {} for c in self.files}
 
@@ -239,10 +252,12 @@ class EconometricsController(BaseController):
 
     def print_help(self):
         """Print help"""
+        current_user = get_current_user()
         mt = MenuText("econometrics/")
         mt.add_param(
             "_data_loc",
-            f"\n\t{str(USER_EXPORTS_DIRECTORY)}\n\t{str(USER_CUSTOM_IMPORTS_DIRECTORY/'econometrics')}",
+            f"\n\t{str(current_user.preferences.USER_EXPORTS_DIRECTORY)}\n"
+            f"\t{str(current_user.preferences.USER_CUSTOM_IMPORTS_DIRECTORY/'econometrics')}",
         )
         mt.add_raw("\n")
         mt.add_cmd("load")
@@ -255,12 +270,16 @@ class EconometricsController(BaseController):
         mt.add_cmd("plot", self.files)
         mt.add_cmd("type", self.files)
         mt.add_cmd("desc", self.files)
+        mt.add_cmd("corr", self.files)
+        mt.add_cmd("season", self.files)
         mt.add_cmd("index", self.files)
         mt.add_cmd("clean", self.files)
         mt.add_cmd("add", self.files)
+        mt.add_cmd("eval", self.files)
         mt.add_cmd("delete", self.files)
         mt.add_cmd("combine", self.files)
         mt.add_cmd("rename", self.files)
+        mt.add_cmd("lag", self.files)
         mt.add_cmd("export", self.files)
         mt.add_info("_tests_")
         mt.add_cmd("norm", self.files)
@@ -285,21 +304,19 @@ class EconometricsController(BaseController):
 
     def update_loaded(self):
         self.list_dataset_cols = []
+        self.loaded_dataset_cols = "\n"
+
         if not self.files:
-            self.loaded_dataset_cols = "\n"
             self.list_dataset_cols.append("")
             return
 
         maxfile = max(len(file) for file in self.files)
-        self.loaded_dataset_cols = "\n"
-        for dataset, data in self.datasets.items():
-            max_files = (maxfile - len(dataset)) * " "
-            self.loaded_dataset_cols += (
-                f"\t{dataset} {max_files}: {', '.join(data.columns)}\n"
-            )
 
-            for col in data.columns:
-                self.list_dataset_cols.append(f"{dataset}.{col}")
+        for dataset, data in self.datasets.items():
+            dataset_columns = ", ".join(data.columns)
+            dataset_name = f"{dataset} {(maxfile - len(dataset)) * ' '}:"
+            self.loaded_dataset_cols += f"\t{dataset_name} {dataset_columns}\n"
+            self.list_dataset_cols.extend([f"{dataset}.{col}" for col in data.columns])
 
     @log_start_end(log=logger)
     def call_load(self, other_args: List[str]):
@@ -332,6 +349,13 @@ class EconometricsController(BaseController):
             action="store_true",
             default=False,
             dest="examples",
+        )
+        parser.add_argument(
+            "--sheet-name",
+            dest="sheet_name",
+            default=None,
+            nargs="+",
+            help="Name of excel sheet to save data to. Only valid for .xlsx files.",
         )
 
         if other_args and "-" not in other_args[0][0]:
@@ -389,7 +413,14 @@ class EconometricsController(BaseController):
                 )
                 return
 
-            data = common_model.load(file, self.DATA_FILES, common_model.DATA_EXAMPLES)
+            data = common_model.load(
+                file,
+                data_files=self.DATA_FILES,
+                data_examples=common_model.DATA_EXAMPLES,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
+            )
 
             if not data.empty:
                 data.columns = data.columns.map(lambda x: x.lower().replace(" ", "_"))
@@ -566,10 +597,9 @@ class EconometricsController(BaseController):
         )
 
         if ns_parser:
-            if not ns_parser.name:
-                dataset_names = list(self.datasets.keys())
-            else:
-                dataset_names = [ns_parser.name]
+            dataset_names = (
+                list(self.datasets.keys()) if not ns_parser.name else [ns_parser.name]
+            )
 
             for name in dataset_names:
                 df = self.datasets[name]
@@ -588,10 +618,12 @@ class EconometricsController(BaseController):
                         df = df.sort_values(by=sort_column, ascending=ns_parser.reverse)
 
                 print_rich_table(
-                    df.head(ns_parser.limit),
+                    df,
                     headers=list(df.columns),
                     show_index=True,
-                    title=f"Dataset {name} | Showing {ns_parser.limit} of {len(df)} rows",
+                    title=f"Dataset {name}",
+                    export=bool(ns_parser.export),
+                    limit=ns_parser.limit,
                 )
 
                 export_data(
@@ -599,6 +631,7 @@ class EconometricsController(BaseController):
                     os.path.dirname(os.path.abspath(__file__)),
                     f"{ns_parser.name}_show",
                     df.head(ns_parser.limit),
+                    ns_parser.sheet_name,
                 )
 
     @log_start_end(log=logger)
@@ -635,6 +668,7 @@ class EconometricsController(BaseController):
                     headers=[col],
                     show_index=True,
                     title=f"Statistics for dataset: '{dataset}'",
+                    export=bool(ns_parser.export),
                 )
 
                 export_data(
@@ -642,6 +676,7 @@ class EconometricsController(BaseController):
                     os.path.dirname(os.path.abspath(__file__)),
                     f"{dataset}_{col}_desc",
                     df,
+                    ns_parser.sheet_name,
                 )
             else:
                 df = self.datasets[ns_parser.name]
@@ -652,6 +687,7 @@ class EconometricsController(BaseController):
                         headers=self.datasets[ns_parser.name].columns,
                         show_index=True,
                         title=f"Statistics for dataset: '{ns_parser.name}'",
+                        export=bool(ns_parser.export),
                     )
 
                     export_data(
@@ -659,13 +695,128 @@ class EconometricsController(BaseController):
                         os.path.dirname(os.path.abspath(__file__)),
                         f"{ns_parser.name}_desc",
                         df,
+                        ns_parser.sheet_name,
                     )
                 else:
                     console.print("Empty dataset")
 
     @log_start_end(log=logger)
+    def call_corr(self, other_args: List[str]):
+        """Process correlation command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="corr",
+            description="Plot correlation coefficients.",
+        )
+        parser.add_argument(
+            "-d",
+            "--dataset",
+            help="The name of the dataset you want to select",
+            dest="target_dataset",
+            type=str,
+            choices=list(self.datasets.keys()),
+        )
+
+        # if user does not put in --dataset
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "--dataset")
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser,
+            other_args,
+            EXPORT_ONLY_FIGURES_ALLOWED,
+        )
+
+        if ns_parser:
+            # check proper file name is provided
+            if not ns_parser.target_dataset:
+                console.print("[red]Please enter valid dataset.\n[/red]")
+                return
+
+            data = self.datasets[ns_parser.target_dataset]
+
+            econometrics_view.display_corr(
+                data,
+                ns_parser.export,
+            )
+
+    @log_start_end(log=logger)
+    def call_season(self, other_args: List[str]):
+        """Process season command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="season",
+            description="The seasonality for a given column",
+        )
+        parser.add_argument(
+            "-v",
+            "--values",
+            help="Dataset.column values to be displayed in a plot",
+            dest="values",
+            choices={
+                f"{dataset}.{column}": {column: None, dataset: None}
+                for dataset, dataframe in self.datasets.items()
+                for column in dataframe.columns
+            },
+            type=str,
+        )
+        parser.add_argument(
+            "-m",
+            help="A time lag to highlight on the plot",
+            dest="m",
+            type=int,
+            default=None,
+        )
+        parser.add_argument(
+            "--max_lag",
+            help="The maximal lag order to consider",
+            dest="max_lag",
+            type=int,
+            default=24,
+        )
+        parser.add_argument(
+            "-a",
+            "--alpha",
+            help="The confidence interval to display",
+            dest="alpha",
+            type=float,
+            default=0.05,
+        )
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "-v")
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, export_allowed=EXPORT_ONLY_FIGURES_ALLOWED
+        )
+
+        if not ns_parser:
+            return
+
+        if not ns_parser.values:
+            console.print("[red]Please enter valid dataset.\n[/red]")
+            return
+
+        try:
+            dataset, col = ns_parser.values.split(".")
+            data = self.datasets[dataset]
+            data.name = dataset
+        except ValueError:
+            console.print("[red]Please enter 'dataset'.'column'.[/red]\n")
+            return
+
+        econometrics_view.display_seasonality(
+            data=data,
+            column=col,
+            export=ns_parser.export,
+            m=ns_parser.m,
+            max_lag=ns_parser.max_lag,
+            alpha=ns_parser.alpha,
+        )
+
+    @log_start_end(log=logger)
     def call_type(self, other_args: List[str]):
-        """Process type"""
+        """Process type command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -739,7 +890,7 @@ class EconometricsController(BaseController):
 
     @log_start_end(log=logger)
     def call_index(self, other_args: List[str]):
-        """Process index"""
+        """Process index command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -789,10 +940,11 @@ class EconometricsController(BaseController):
             index = ns_parser.index
 
             if index:
-                if "," in index:
-                    values_found = [val.strip() for val in index.split(",")]
-                else:
-                    values_found = [index]
+                values_found = (
+                    [val.strip() for val in index.split(",")]
+                    if "," in index
+                    else [index]
+                )
 
                 columns = list()
                 for value in values_found:
@@ -856,7 +1008,7 @@ class EconometricsController(BaseController):
 
     @log_start_end(log=logger)
     def call_clean(self, other_args: List[str]):
-        """Process clean"""
+        """Process clean command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -906,7 +1058,7 @@ class EconometricsController(BaseController):
 
     @log_start_end(log=logger)
     def call_add(self, other_args: List[str]):
-        """Process add"""
+        """Process add command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -1010,8 +1162,108 @@ class EconometricsController(BaseController):
         console.print()
 
     @log_start_end(log=logger)
+    def call_lag(self, other_args: List[str]):
+        """Process lag command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="lag",
+            description="Add lag to a variable by shifting a column.",
+        )
+        parser.add_argument(
+            "-v",
+            "--values",
+            help="Dataset.column values to add lag to.",
+            dest="values",
+            choices={
+                f"{dataset}.{column}": {column: None, dataset: None}
+                for dataset, dataframe in self.datasets.items()
+                for column in dataframe.columns
+            },
+            type=str,
+            required="-h" not in other_args,
+        )
+        parser.add_argument(
+            "-l",
+            "--lags",
+            action="store",
+            dest="lags",
+            type=check_positive,
+            default=5,
+            help="How many periods to lag the selected column.",
+            required="-h" not in other_args,
+        )
+        parser.add_argument(
+            "-f",
+            "--fill-value",
+            action="store",
+            dest="fill_value",
+            help="The value used for filling the newly introduced missing values.",
+        )
+
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "-v")
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, export_allowed=NO_EXPORT
+        )
+
+        if not ns_parser:
+            return
+
+        try:
+            dataset, col = ns_parser.values.split(".")
+            data = self.datasets[dataset]
+        except ValueError:
+            console.print("[red]Please enter 'dataset'.'column'.[/red]\n")
+            return
+
+        data[col + "_with_" + str(ns_parser.lags) + "_lags"] = data[col].shift(
+            ns_parser.lags, fill_value=ns_parser.fill_value
+        )
+        self.datasets[dataset] = data
+
+        self.update_runtime_choices()
+
+    @log_start_end(log=logger)
+    def call_eval(self, other_args):
+        """Process eval command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="eval",
+            description="""Create custom data column from loaded datasets.  Can be mathematical expressions supported
+                by pandas.eval() function.
+
+                Example.  If I have loaded `fred DGS2,DGS5` and I want to create a new column that is the difference
+                between these two, I can create a new column by doing `eval spread = DGS2 - DGS5`.
+                Notice that the command is case sensitive, i.e., `DGS2` is not the same as `dgs2`.
+                """,
+        )
+        parser.add_argument(
+            "-q",
+            "--query",
+            type=str,
+            nargs="+",
+            dest="query",
+            required="-h" not in other_args,
+            help="Query to evaluate on loaded datasets",
+        )
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "-q")
+
+        ns_parser = self.parse_known_args_and_warn(
+            parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
+        )
+        if ns_parser:
+            self.datasets = econometrics_helpers.create_new_entry(
+                self.datasets, " ".join(ns_parser.query)
+            )
+            self.update_runtime_choices()
+            self.update_loaded()
+
+    @log_start_end(log=logger)
     def call_delete(self, other_args: List[str]):
-        """Process add"""
+        """Process delete command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -1052,7 +1304,7 @@ class EconometricsController(BaseController):
 
     @log_start_end(log=logger)
     def call_combine(self, other_args: List[str]):
-        """Process combine"""
+        """Process combine command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -1110,7 +1362,7 @@ class EconometricsController(BaseController):
 
     @log_start_end(log=logger)
     def call_rename(self, other_args: List[str]):
-        """Process rename"""
+        """Process rename command"""
         parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -1526,7 +1778,13 @@ class EconometricsController(BaseController):
             parser, other_args, EXPORT_ONLY_RAW_DATA_ALLOWED
         )
         if ns_parser:
-            regression_model.get_comparison(self.regression, ns_parser.export)
+            regression_model.get_comparison(
+                self.regression,
+                ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
+            )
             console.print()
 
     @log_start_end(log=logger)
@@ -1675,7 +1933,6 @@ class EconometricsController(BaseController):
         )
 
         if ns_parser and ns_parser.ts:
-
             datasetcol_y, datasetcol_x = ns_parser.ts.split(",")
 
             dataset_y, column_y = datasetcol_y.split(".")
@@ -1729,30 +1986,31 @@ class EconometricsController(BaseController):
             parser, other_args, EXPORT_BOTH_RAW_DATA_AND_FIGURES
         )
 
-        if ns_parser:
+        if ns_parser and ns_parser.ts:
+            # We are going to pass through a variable number of series, so datasets will be a list of series
+            if len(ns_parser.ts) > 1:
+                datasets = []
+                for series in ns_parser.ts:
+                    if "." not in series:
+                        console.print(
+                            "[red]Invalid time series format. Should be dataset.column, "
+                            "e.g. historical.open[/red]\n"
+                        )
+                    else:
+                        dataset, column = series.split(".")
+                        datasets.append(self.datasets[dataset][column])
 
-            if ns_parser.ts:
-                # We are going to pass through a variable number of series, so datasets will be a list of series
-                if len(ns_parser.ts) > 1:
-                    datasets = []
-                    for series in ns_parser.ts:
-                        if "." not in series:
-                            console.print(
-                                "[red]Invalid time series format. Should be dataset.column, "
-                                "e.g. historical.open[/red]\n"
-                            )
-                        else:
-                            dataset, column = series.split(".")
-                            datasets.append(self.datasets[dataset][column])
+                econometrics_view.display_cointegration_test(
+                    *datasets,
+                    significant=ns_parser.significant,
+                    plot=ns_parser.plot,
+                    export=ns_parser.export,
+                    sheet_name=" ".join(ns_parser.sheet_name)
+                    if ns_parser.sheet_name
+                    else None,
+                )
 
-                    econometrics_view.display_cointegration_test(
-                        *datasets,
-                        significant=ns_parser.significant,
-                        plot=ns_parser.plot,
-                        export=ns_parser.export,
-                    )
-
-                else:
-                    console.print(
-                        "[red]More than one dataset.column must be provided.\n[/red]"
-                    )
+            else:
+                console.print(
+                    "[red]More than one dataset.column must be provided.\n[/red]"
+                )

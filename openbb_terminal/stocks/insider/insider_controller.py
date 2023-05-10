@@ -4,11 +4,11 @@ __docformat__ = "numpy"
 import argparse
 import configparser
 import logging
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 
-from openbb_terminal import feature_flags as obbff
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import EXPORT_ONLY_RAW_DATA_ALLOWED, check_positive
@@ -75,7 +75,7 @@ class InsiderController(StockBaseController):
         start: str,
         interval: str,
         stock: pd.DataFrame,
-        queue: List[str] = None,
+        queue: Optional[List[str]] = None,
     ):
         """Constructor"""
         super().__init__(queue)
@@ -86,7 +86,7 @@ class InsiderController(StockBaseController):
         self.stock = stock
         self.preset = "whales"
 
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             choices: dict = self.choices_default
 
             self.completer = NestedCompleter.from_nested_dict(choices)
@@ -189,9 +189,9 @@ class InsiderController(StockBaseController):
                     console.print("")
 
             else:
-                for preset in self.preset_choices:
+                for preset, path in self.preset_choices.items():
                     with open(
-                        self.preset_choices[preset],
+                        path,
                         encoding="utf8",
                     ) as f:
                         description = ""
@@ -269,6 +269,9 @@ class InsiderController(StockBaseController):
                 limit=ns_parser.limit,
                 links=ns_parser.urls,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -310,6 +313,9 @@ class InsiderController(StockBaseController):
                     limit=ns_parser.limit,
                     links=ns_parser.urls,
                     export=ns_parser.export,
+                    sheet_name=" ".join(ns_parser.sheet_name)
+                    if ns_parser.sheet_name
+                    else None,
                 )
             else:
                 console.print("Please use `load <ticker>` before.\n")
@@ -904,6 +910,9 @@ class InsiderController(StockBaseController):
                     limit=ns_parser.limit,
                     raw=ns_parser.raw,
                     export=ns_parser.export,
+                    sheet_name=" ".join(ns_parser.sheet_name)
+                    if ns_parser.sheet_name
+                    else None,
                 )
             else:
                 console.print("No ticker loaded. First use `load {ticker}`\n")
@@ -939,6 +948,9 @@ class InsiderController(StockBaseController):
                     symbol=self.ticker,
                     limit=ns_parser.limit,
                     export=ns_parser.export,
+                    sheet_name=" ".join(ns_parser.sheet_name)
+                    if ns_parser.sheet_name
+                    else None,
                 )
             else:
                 console.print("No ticker loaded. First use `load {ticker}`\n")

@@ -1,7 +1,8 @@
 import os
+from typing import Optional
 
-from openbb_terminal.helper_funcs import print_rich_table, export_data
 from openbb_terminal.cryptocurrency import crypto_models
+from openbb_terminal.helper_funcs import export_data, print_rich_table
 
 
 def find(
@@ -10,6 +11,7 @@ def find(
     key: str = "symbol",
     limit: int = 10,
     export: str = "",
+    sheet_name: Optional[str] = None,
 ) -> None:
     """Find similar coin by coin name,symbol or id.
 
@@ -40,7 +42,11 @@ def find(
 
     if not df.empty:
         print_rich_table(
-            df, headers=list(df.columns), show_index=False, title="Similar Coins"
+            df,
+            headers=list(df.columns),
+            show_index=False,
+            title="Similar Coins",
+            export=bool(export),
         )
 
         export_data(
@@ -48,4 +54,5 @@ def find(
             os.path.dirname(os.path.abspath(__file__)),
             "find",
             df,
+            sheet_name,
         )

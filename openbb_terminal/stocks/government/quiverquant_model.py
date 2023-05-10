@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
-import requests
 from sklearn.linear_model import LinearRegression
 
 from openbb_terminal.decorators import log_start_end
+from openbb_terminal.helper_funcs import request
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
@@ -88,14 +88,13 @@ def get_government_trading(
         "X-CSRFToken": "TyTJwjuEC7VV7mOqZ622haRaaUr0x0Ng4nrwSRFKQs7vdoBcJlK9qjAS69ghzhFu",  # pragma: allowlist secret
         "Authorization": f"Token {API_QUIVERQUANT_KEY}",
     }
-    response = requests.get(url, headers=headers)
+    response = request(url, headers=headers)
     if response.status_code == 200:
         if gov_type in ["congress", "senate", "house"]:
             return pd.DataFrame(response.json()).rename(
                 columns={"Date": "TransactionDate", "Senator": "Representative"}
             )
         return pd.DataFrame(response.json())
-
     return pd.DataFrame()
 
 
@@ -407,7 +406,7 @@ def get_last_contracts(
 
     df_contracts = df_contracts[["Date", "Ticker", "Amount", "Description", "Agency"]]
     df_contracts["Description"] = df_contracts["Description"].apply(
-        lambda x: "\n".join(textwrap.wrap(x, 50))
+        lambda x: "\n".join(textwrap.wrap(x, 50)) if x is not None else None
     )
 
     return df_contracts
@@ -507,7 +506,7 @@ def get_qtr_contracts(analysis: str = "total", limit: int = 5) -> pd.DataFrame:
         return pd.DataFrame(df_groups[:limit])
 
     if analysis in {"upmom", "downmom"}:
-        df_coef = pd.DataFrame(columns=["Ticker", "Coef"])
+        coef = []
         df_groups = df_contracts.groupby("Ticker")
         for tick, data in df_groups:
             regr = LinearRegression()
@@ -517,13 +516,12 @@ def get_qtr_contracts(analysis: str = "total", limit: int = 5) -> pd.DataFrame:
             # Train the model using the training sets
             regr.fit(np.arange(0, len(amounts)).reshape(-1, 1), amounts)
 
-            df_coef = df_coef.append(
-                {"Ticker": tick, "Coef": regr.coef_[0]}, ignore_index=True
-            )
+            coef.append({"Ticker": tick, "Coef": regr.coef_[0]})
 
-        return df_coef.sort_values(by=["Coef"], ascending=analysis == "downmom")[
-            "Ticker"
-        ][:limit]
+        return pd.DataFrame(coef).sort_values(
+            by=["Coef"], ascending=analysis == "downmom"
+        )["Ticker"][:limit]
+
     return pd.DataFrame()
 
 

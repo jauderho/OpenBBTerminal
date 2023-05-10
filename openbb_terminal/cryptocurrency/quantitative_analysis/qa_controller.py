@@ -3,26 +3,25 @@ __docformat__ = "numpy"
 
 import argparse
 import logging
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
 
-from openbb_terminal.custom_prompt_toolkit import NestedCompleter
-
-from openbb_terminal import feature_flags as obbff
 from openbb_terminal.common.quantitative_analysis import qa_view, rolling_view
+from openbb_terminal.core.session.current_user import get_current_user
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
     EXPORT_ONLY_FIGURES_ALLOWED,
     EXPORT_ONLY_RAW_DATA_ALLOWED,
+    check_list_dates,
     check_positive,
     check_proportion_range,
-    check_list_dates,
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import CryptoBaseController
-from openbb_terminal.rich_config import console, MenuText
+from openbb_terminal.rich_config import MenuText, console
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class QaController(CryptoBaseController):
         self,
         symbol: str,
         data: pd.DataFrame,
-        queue: List[str] = None,
+        queue: Optional[List[str]] = None,
     ):
         """Constructor"""
         super().__init__(queue)
@@ -74,7 +73,7 @@ class QaController(CryptoBaseController):
         self.symbol = symbol
         self.target = "Close"
 
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             choices: dict = self.choices_default
 
             choices["pick"].update({c: {} for c in self.data.columns.tolist()})
@@ -217,6 +216,9 @@ class QaController(CryptoBaseController):
                 sortby=ns_parser.sortby,
                 ascend=ns_parser.reverse,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -234,7 +236,13 @@ class QaController(CryptoBaseController):
             parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
         )
         if ns_parser:
-            qa_view.display_summary(data=self.data, export=ns_parser.export)
+            qa_view.display_summary(
+                data=self.data,
+                export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
+            )
 
     @log_start_end(log=logger)
     def call_line(self, other_args: List[str]):
@@ -277,6 +285,7 @@ class QaController(CryptoBaseController):
                 log_y=ns_parser.log,
                 markers_lines=ns_parser.ml,
                 markers_scatter=ns_parser.ms,
+                export=ns_parser.export,
             )
 
     @log_start_end(log=logger)
@@ -328,6 +337,9 @@ class QaController(CryptoBaseController):
                 data=self.data,
                 target=self.target,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -389,6 +401,9 @@ class QaController(CryptoBaseController):
                 target=self.target,
                 multiplicative=ns_parser.multiplicative,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -500,6 +515,9 @@ class QaController(CryptoBaseController):
                 target=self.target,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -533,6 +551,9 @@ class QaController(CryptoBaseController):
                 target=self.target,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -586,6 +607,9 @@ class QaController(CryptoBaseController):
                 window=ns_parser.n_window,
                 quantile=ns_parser.f_quantile,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -625,6 +649,9 @@ class QaController(CryptoBaseController):
                 target=self.target,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -664,6 +691,9 @@ class QaController(CryptoBaseController):
                 target=self.target,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -741,4 +771,7 @@ class QaController(CryptoBaseController):
                 fuller_reg=ns_parser.fuller_reg,
                 kpss_reg=ns_parser.kpss_reg,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )

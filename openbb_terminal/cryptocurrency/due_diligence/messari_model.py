@@ -4,13 +4,12 @@ __docformat__ = "numpy"
 # pylint: disable=C0301,C0302
 
 import logging
-from typing import Any, Optional, Tuple
-from datetime import datetime, timedelta
 import re
-import pandas as pd
-import requests
+from datetime import datetime, timedelta
+from typing import Any, Optional, Tuple
 
-from openbb_terminal import config_terminal as cfg
+import pandas as pd
+
 from openbb_terminal.cryptocurrency.dataframe_helpers import (
     lambda_replace_underscores_in_column_names,
     prettify_column_names,
@@ -19,8 +18,9 @@ from openbb_terminal.cryptocurrency.due_diligence.pycoingecko_model import (
     get_coin_tokenomics,
 )
 from openbb_terminal.decorators import check_api_key, log_start_end
-from openbb_terminal.helper_funcs import lambda_long_number_format
+from openbb_terminal.helper_funcs import lambda_long_number_format, request
 from openbb_terminal.rich_config import console
+from openbb_terminal.core.session.current_user import get_current_user
 
 # pylint: disable=unsupported-assignment-operation
 
@@ -45,7 +45,7 @@ def get_available_timeseries(only_free: bool = True) -> pd.DataFrame:
     pd.DataFrame
         available timeseries
     """
-    r = requests.get("https://data.messari.io/api/v1/assets/metrics")
+    r = request("https://data.messari.io/api/v1/assets/metrics")
     if r.status_code == 200:
         data = r.json()
         metrics = data["data"]["metrics"]
@@ -166,7 +166,7 @@ def get_messari_timeseries(
 
     url = base_url + f"assets/{symbol}/metrics/{timeseries_id}/time-series"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     parameters = {
         "start": start_date,
@@ -174,7 +174,7 @@ def get_messari_timeseries(
         "interval": interval,
     }
 
-    r = requests.get(url, params=parameters, headers=headers)
+    r = request(url, params=parameters, headers=headers)
 
     df = pd.DataFrame()
     title = ""
@@ -218,11 +218,11 @@ def get_links(symbol: str) -> pd.DataFrame:
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/general/overview/official_links"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
 
@@ -259,11 +259,11 @@ def get_roadmap(symbol: str, ascend: bool = True) -> pd.DataFrame:
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/general/roadmap"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
 
@@ -311,7 +311,7 @@ def get_tokenomics(symbol: str, coingecko_id: str) -> Tuple[pd.DataFrame, pd.Dat
 
     params = {"fields": "profile/economics/consensus_and_emission"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     circ_df = pd.DataFrame()
@@ -383,7 +383,7 @@ def get_project_product_info(
 
     params = {"fields": "profile/general/overview/project_details,profile/technology"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     if r.status_code == 200:
@@ -441,11 +441,11 @@ def get_team(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/contributors"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     if r.status_code == 200:
@@ -516,11 +516,11 @@ def get_investors(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/investors"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     if r.status_code == 200:
@@ -589,11 +589,11 @@ def get_governance(symbol: str) -> Tuple[str, pd.DataFrame]:
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/governance"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     if r.status_code == 200:
@@ -668,11 +668,11 @@ def get_fundraising(
 
     url = base_url2 + f"assets/{symbol}/profile"
 
-    headers = {"x-messari-api-key": cfg.API_MESSARI_KEY}
+    headers = {"x-messari-api-key": get_current_user().credentials.API_MESSARI_KEY}
 
     params = {"fields": "profile/economics/launch"}
 
-    r = requests.get(url, headers=headers, params=params)
+    r = request(url, headers=headers, params=params)
 
     df = pd.DataFrame()
     if r.status_code == 200:

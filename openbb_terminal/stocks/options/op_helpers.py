@@ -1,43 +1,33 @@
 """Option helper functions"""
 __docformat__ = "numpy"
 
-import os
+import logging
 from datetime import datetime, timedelta
 from math import e, log
-from typing import Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
-from openbb_terminal.helper_funcs import export_data
+from openbb_terminal.decorators import log_start_end
+from openbb_terminal.helper_funcs import get_rf
 from openbb_terminal.rich_config import console
 
+logger = logging.getLogger(__name__)
 
-def get_dte_from_expiration(date: str) -> float:
-    """
-    Converts a date to total days until the option would expire.
-    This assumes that the date is in the form %B %d, %Y such as January 11, 2023
-    This calculates time from 'now' to 4 PM the date of expiration
-    This is particularly a helper for nasdaq results.
+# pylint: disable=too-many-arguments
 
-    Parameters
-    ----------
-    date: str
-        Date in format %B %d, %Y
 
-    Returns
-    -------
-    float
-        Days to expiration as a decimal
-    """
-    # Get the date as a datetime and add 16 hours (4PM)
-    expiration_time = datetime.strptime(date, "%B %d, %Y") + timedelta(hours=16)
-    # Find total seconds from now
-    time_to_now = (expiration_time - datetime.now()).total_seconds()
-    # Convert to days
-    time_to_now /= 60 * 60 * 24
-    return time_to_now
+@log_start_end(log=logger)
+def get_strikes(
+    min_sp: float, max_sp: float, current_price: float
+) -> Tuple[float, float]:
+    min_strike = 0.75 * current_price if min_sp == -1 else min_sp
+
+    max_strike = 1.25 * current_price if max_sp == -1 else max_sp
+
+    return min_strike, max_strike
 
 
 def get_loss_at_strike(strike: float, chain: pd.DataFrame) -> float:
@@ -68,6 +58,7 @@ def get_loss_at_strike(strike: float, chain: pd.DataFrame) -> float:
     return loss
 
 
+@log_start_end(log=logger)
 def calculate_max_pain(chain: pd.DataFrame) -> Union[int, float]:
     """Returns the max pain for a given call/put dataframe
 
@@ -113,6 +104,7 @@ def convert(orig: str, to: str) -> float:
     raise ValueError("Invalid to format, please use '%' or ','.")
 
 
+@log_start_end(log=logger)
 def rn_payoff(x: str, df: pd.DataFrame, put: bool, delta: int, rf: float) -> float:
     """The risk neutral payoff for a stock
     Parameters
@@ -142,27 +134,192 @@ def rn_payoff(x: str, df: pd.DataFrame, put: bool, delta: int, rf: float) -> flo
     return sum(df["Vals"]) / risk_free
 
 
-def export_yf_options(export: str, options, file_name: str):
-    """Special function to assist in exporting yf options
+@log_start_end(log=logger)
+def process_option_chain(data: pd.DataFrame, source: str) -> pd.DataFrame:
+    """
+    Create an option chain DataFrame from the given symbol.
+    Does additional processing in order to get some homogeneous between the sources.
 
     Parameters
     ----------
-    export: str
-        Format to export file
-    options: Options
-        The yfinance Options object
-    file_name: str
-        The file_name to export to
+    data : pd.DataFrame
+        The option chain data
+    source: str, optional
+        The source of the data. Valid values are "Tradier", "Nasdaq", and
+        "YahooFinance". The default value is "Tradier".
 
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the option chain data, with columns as specified
+        in the `option_chain_column_mapping` mapping, and an additional column
+        "optionType" that indicates whether the option is a call or a put.
     """
-    for option_name in ["calls", "puts"]:
-        option = getattr(options, option_name)
-        export_data(
-            export,
-            os.path.dirname(os.path.abspath(__file__)),
-            f"{file_name}_{option_name}",
-            option,
+    if source == "Tradier":
+        df = data.rename(columns=option_chain_column_mapping["Tradier"])
+
+    elif source == "Nasdaq":
+        call_columns = ["expiration", "strike"] + [
+            col for col in data.columns if col.startswith("c_")
+        ]
+        calls = data[call_columns].rename(columns=option_chain_column_mapping["Nasdaq"])
+        calls["optionType"] = "call"
+
+        put_columns = ["expiration", "strike"] + [
+            col for col in data.columns if col.startswith("p_")
+        ]
+        puts = data[put_columns].rename(columns=option_chain_column_mapping["Nasdaq"])
+        puts["optionType"] = "put"
+
+        df = pd.concat([calls, puts]).drop_duplicates()
+
+    elif source == "Intrinio":
+        df = data.copy()
+
+    elif source == "YahooFinance":
+        call_columns = ["expiration", "strike"] + [
+            col for col in data.columns if col.endswith("_c")
+        ]
+        calls = data[call_columns].rename(
+            columns=option_chain_column_mapping["YahooFinance"]
         )
+        calls["optionType"] = "call"
+
+        put_columns = ["expiration", "strike"] + [
+            col for col in data.columns if col.endswith("_p")
+        ]
+        puts = data[put_columns].rename(
+            columns=option_chain_column_mapping["YahooFinance"]
+        )
+        puts["optionType"] = "put"
+
+        df = pd.concat([calls, puts]).drop_duplicates()
+
+    else:
+        df = pd.DataFrame()
+
+    return df
+
+
+@log_start_end(log=logger)
+def get_greeks(
+    current_price: float,
+    calls: pd.DataFrame,
+    puts: pd.DataFrame,
+    expire: str,
+    div_cont: float = 0,
+    rf: Optional[float] = None,
+    opt_type: int = 0,
+    show_all: bool = False,
+    show_extra_greeks: bool = False,
+) -> pd.DataFrame:
+    """
+    Gets the greeks for a given option
+
+    Parameters
+    ----------
+    current_price: float
+        The current price of the underlying
+    div_cont: float
+        The dividend continuous rate
+    expire: str
+        The date of expiration
+    rf: float
+        The risk-free rate
+    opt_type: Union[-1, 0, 1]
+        The option type 1 is for call and -1 is for put
+    mini: float
+        The minimum strike price to include in the table
+    maxi: float
+        The maximum strike price to include in the table
+    show_all: bool
+        Whether to show all columns from puts and calls
+    show_extra_greeks: bool
+        Whether to show all greeks
+    """
+
+    chain = pd.DataFrame()
+
+    if opt_type not in [-1, 0, 1]:
+        console.print("[red]Invalid option type[/red]")
+    elif opt_type == 1:
+        chain = calls
+    elif opt_type == -1:
+        chain = puts
+    else:
+        chain = pd.concat([calls, puts])
+
+    chain_columns = chain.columns.tolist()
+    if not all(
+        col in chain_columns for col in ["strike", "impliedVolatility", "optionType"]
+    ):
+        if "delta" not in chain_columns:
+            console.print(
+                "[red]It's not possible to calculate the greeks without the following "
+                "columns: `strike`, `impliedVolatility`, `optionType`.\n[/red]"
+            )
+        return pd.DataFrame()
+
+    risk_free = rf if rf is not None else get_rf()
+    expire_dt = datetime.strptime(expire, "%Y-%m-%d")
+    dif = (expire_dt - datetime.now() + timedelta(hours=16)).total_seconds() / (
+        60 * 60 * 24
+    )
+    strikes = []
+    for _, row in chain.iterrows():
+        vol = row["impliedVolatility"]
+        is_call = row["optionType"] == "call"
+        result = (
+            [row[col] for col in row.index.tolist()]
+            if show_all
+            else [row[col] for col in ["strike", "impliedVolatility"]]
+        )
+        try:
+            opt = Option(
+                current_price, row["strike"], risk_free, div_cont, dif, vol, is_call
+            )
+            tmp = [
+                opt.Delta(),
+                opt.Gamma(),
+                opt.Vega(),
+                opt.Theta(),
+            ]
+            result += tmp
+
+            if show_extra_greeks:
+                result += [
+                    opt.Rho(),
+                    opt.Phi(),
+                    opt.Charm(),
+                    opt.Vanna(0.01),
+                    opt.Vomma(0.01),
+                ]
+        except ValueError:
+            result += [np.nan] * 4
+
+            if show_extra_greeks:
+                result += [np.nan] * 5
+        strikes.append(result)
+
+    greek_columns = [
+        "Delta",
+        "Gamma",
+        "Vega",
+        "Theta",
+    ]
+    columns = (
+        chain_columns + greek_columns
+        if show_all
+        else ["Strike", "Implied Vol"] + greek_columns
+    )
+
+    if show_extra_greeks:
+        additional_columns = ["Rho", "Phi", "Charm", "Vanna", "Vomma"]
+        columns += additional_columns
+
+    df = pd.DataFrame(strikes, columns=columns)
+
+    return df
 
 
 opt_chain_cols = {
@@ -178,26 +335,57 @@ opt_chain_cols = {
     "impliedVolatility": {"format": "{x:.2f}", "label": "Implied Volatility"},
 }
 
-
-# pylint: disable=R0903
-class Chain:
-    def __init__(self, df: pd.DataFrame, source: str = "tradier"):
-        if source == "tradier":
-            self.calls = df[df["option_type"] == "call"]
-            self.puts = df[df["option_type"] == "put"]
-        elif source == "nasdaq":
-            # These guys have different column names
-            call_columns = ["expiryDate", "strike"] + [
-                col for col in df.columns if col.startswith("c_")
-            ]
-            put_columns = ["expiryDate", "strike"] + [
-                col for col in df.columns if col.startswith("p_")
-            ]
-            self.calls = df[call_columns]
-            self.puts = df[put_columns]
-        else:
-            self.calls = None
-            self.puts = None
+option_chain_column_mapping = {
+    "Nasdaq": {
+        "strike": "strike",
+        "c_Last": "last",
+        "c_Change": "change",
+        "c_Bid": "bid",
+        "c_Ask": "ask",
+        "c_Volume": "volume",
+        "c_Openinterest": "openInterest",
+        "p_Last": "last",
+        "p_Change": "change",
+        "p_Bid": "bid",
+        "p_Ask": "ask",
+        "p_Volume": "volume",
+        "p_Openinterest": "openInterest",
+    },
+    "Tradier": {
+        "open_interest": "openInterest",
+        "option_type": "optionType",
+    },
+    "YahooFinance": {
+        "contractSymbol_c": "contractSymbol",
+        "lastTradeDate_c": "lastTradeDate",
+        "strike": "strike",
+        "lastPrice_c": "lastPrice",
+        "bid_c": "bid",
+        "ask_c": "ask",
+        "change_c": "change",
+        "percentChange_c": "percentChange",
+        "volume_c": "volume",
+        "openInterest_c": "openInterest",
+        "impliedVolatility_c": "impliedVolatility",
+        "inTheMoney_c": "inTheMoney",
+        "contractSize_c": "contractSize",
+        "currency_c": "currency",
+        "contractSymbol_p": "contractSymbol",
+        "lastTradeDate_p": "lastTradeDate",
+        "lastPrice_p": "lastPrice",
+        "bid_p": "bid",
+        "ask_p": "ask",
+        "change_p": "change",
+        "percentChange_p": "percentChange",
+        "volume_p": "volume",
+        "openInterest_p": "openInterest",
+        "impliedVolatility_p": "impliedVolatility",
+        "inTheMoney_p": "inTheMoney",
+        "contractSize_p": "contractSize",
+        "currency_p": "currency",
+        "expiration": "expiration",
+    },
+}
 
 
 class Option:
@@ -209,7 +397,7 @@ class Option:
         div_cont: float,
         expiry: float,
         vol: float,
-        opt_type: int = 1,
+        is_call: bool = True,
     ):
         """
         Class for getting the greeks of options. Inspiration from:
@@ -229,10 +417,18 @@ class Option:
             The number of days until expiration
         vol : float
             The underlying volatility for an option
-        opt_type : int
-            put == -1; call == +1
+        is_call : bool
+            True if call, False if put
         """
-        self.Type = int(opt_type)
+        if expiry <= 0:
+            raise ValueError("Expiry must be greater than 0")
+        if vol <= 0:
+            raise ValueError("Volatility must be greater than 0")
+        if s <= 0:
+            raise ValueError("Price must be greater than 0")
+        if k <= 0:
+            raise ValueError("Strike must be greater than 0")
+        self.Type = 1 if is_call else -1
         self.price = float(s)
         self.strike = float(k)
         self.risk_free = float(rf)

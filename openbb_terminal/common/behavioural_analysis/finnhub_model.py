@@ -4,10 +4,10 @@ __docformat__ = "numpy"
 import logging
 
 import pandas as pd
-import requests
 
-from openbb_terminal import config_terminal as cfg
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.decorators import check_api_key, log_start_end
+from openbb_terminal.helper_funcs import request
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,8 @@ def get_sentiment_stats(ticker: str) -> pd.DataFrame:
     pd.DataFrame
         Get sentiment stats
     """
-    response = requests.get(
-        f"https://finnhub.io/api/v1/news-sentiment?symbol={ticker}&token={cfg.API_FINNHUB_KEY}"
+    response = request(
+        f"https://finnhub.io/api/v1/news-sentiment?symbol={ticker}&token={get_current_user().credentials.API_FINNHUB_KEY}"
     )
 
     df = pd.DataFrame()

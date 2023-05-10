@@ -1,18 +1,23 @@
 """Forecast Controller Module"""
 __docformat__ = "numpy"
 
-# pylint: disable=too-many-lines, too-many-branches, too-many-arguments, R0904,R0902,W0707
+# pylint: disable=C0302,too-many-branches,too-many-arguments,R0904,R0902,W0707
 # flake8: noqa
+
+# IMPORT STANDARD
 import argparse
 import logging
-from typing import Any, Optional, List, Dict
+from typing import Any, Dict, List, Optional
+
+# IMPORT THIRDPARTY
+import pandas as pd
+import psutil
 
 try:
+    import darts
     import torch
 
-    import darts
-
-    darts_latest = "0.22.0"
+    darts_latest = "0.23.0"
     # check darts version
     if darts.__version__ != darts_latest:
         print(f"You are currently using Darts version {darts.__version__}")
@@ -20,21 +25,44 @@ try:
             "Follow instructions on creating a new conda environment with the latest "
             f"Darts version ({darts_latest}):"
         )
-        print("https://docs.openbb.co/terminal/quickstart/installation")
+        print("https://my.openbb.co/app/sdk/installation")
 except ModuleNotFoundError:
     raise ModuleNotFoundError(
         "Please install the forecast version of the terminal. Instructions can be found "
-        "under the python tab: https://docs.openbb.co/terminal/quickstart/installation"
+        "under the python tab: https://my.openbb.co/app/sdk/installation"
     )
-import pandas as pd
-import psutil
-from openbb_terminal.core.config.paths import (
-    USER_EXPORTS_DIRECTORY,
-    USER_CUSTOM_IMPORTS_DIRECTORY,
-)
-from openbb_terminal import feature_flags as obbff
+
+try:
+    import whisper
+    import transformers
+    from whisper.tokenizer import LANGUAGES, TO_LANGUAGE_CODE
+    from openbb_terminal.forecast.whisper_utils import str2bool
+
+    transformers_ver = transformers.__version__
+    # if imports are successful, set flag to True
+    WHISPER_AVAILABLE = True
+
+except ModuleNotFoundError:
+    raise ModuleNotFoundError(
+        "Please use poetry to install latest whisper model and dependencies. \n"
+        "poetry install -E forecast \n"
+        "\n"
+        "If you are not using poetry, please install whisper model. Instructions can be found here: \n"
+        "https://github.com/openai/whisper \n"
+        "Please install the transformers library with the following command: \n"
+        "pip install transformers \n"
+    )
+
+
+# ignore  pylint(ungrouped-imports)
+# pylint: disable=ungrouped-imports
+
+# IMPORT INTERNAL
+from openbb_terminal.core.session.current_user import get_current_user
+from openbb_terminal.common import common_model
 from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
+
 from openbb_terminal.helper_funcs import (
     check_positive,
     check_positive_float,
@@ -43,37 +71,39 @@ from openbb_terminal.helper_funcs import (
     EXPORT_ONLY_RAW_DATA_ALLOWED,
     log_and_raise,
     valid_date,
+    parse_and_split_input,
 )
 
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import BaseController
 from openbb_terminal.rich_config import console, MenuText
+
 from openbb_terminal.forecast import (
-    forecast_model,
-    forecast_view,
-    autoselect_view,
+    anom_view,
     autoarima_view,
     autoces_view,
     autoets_view,
-    mstl_view,
-    rwd_view,
-    seasonalnaive_view,
+    autoselect_view,
+    brnn_view,
     expo_model,
     expo_view,
-    linregr_view,
-    nbeats_view,
-    regr_view,
-    tcn_view,
-    theta_view,
-    rnn_view,
-    brnn_view,
-    tft_view,
+    forecast_model,
+    forecast_view,
     helpers,
-    trans_view,
+    linregr_view,
+    mstl_view,
+    nbeats_view,
     nhits_view,
+    regr_view,
+    rnn_view,
+    rwd_view,
+    seasonalnaive_view,
+    tcn_view,
+    tft_view,
+    theta_view,
+    trans_view,
+    whisper_model,
 )
-
-from openbb_terminal.common import common_model
 
 logger = logging.getLogger(__name__)
 empty_df = pd.DataFrame()
@@ -100,6 +130,7 @@ class ForecastController(BaseController):
         "plot",
         "clean",
         "combine",
+        "setndays",
         "desc",
         "corr",
         "rename",
@@ -133,6 +164,8 @@ class ForecastController(BaseController):
         "season",
         "which",
         "nhits",
+        "anom",
+        "whisper",
     ]
     pandas_plot_choices = [
         "line",
@@ -160,7 +193,10 @@ class ForecastController(BaseController):
     list_dataset_cols: list = list()
 
     def __init__(
-        self, ticker: str = "", data: pd.DataFrame = empty_df, queue: List[str] = None
+        self,
+        ticker: str = "",
+        data: pd.DataFrame = empty_df,
+        queue: Optional[List[str]] = None,
     ):
         """Constructor"""
         super().__init__(queue)
@@ -170,6 +206,7 @@ class ForecastController(BaseController):
         self.files_full: List[List[str]] = []
         self.datasets: Dict[str, pd.DataFrame] = dict()
         self.MINIMUM_DATA_LENGTH = 100
+        self.ndays = 5
 
         if ticker and not data.empty:
             data = data.reset_index()
@@ -206,7 +243,7 @@ class ForecastController(BaseController):
         self.torch_version = torch.__version__
         self.darts_version = darts.__version__
 
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             choices: dict = self.choices_default
 
             self.choices = choices
@@ -225,11 +262,27 @@ class ForecastController(BaseController):
             for column in dataframe.columns
         }
 
+    def parse_input(self, an_input: str) -> List:
+        """Parse controller input
+
+        Overrides the parent class function to handle YouTube video URL conventions.
+        See `BaseController.parse_input()` for details.
+        """
+        # Filtering out YouTube video parameters like "v=" and removing the domain name
+        youtube_filter = r"(youtube\.com/watch\?v=)"
+
+        custom_filters = [youtube_filter]
+
+        commands = parse_and_split_input(
+            an_input=an_input.replace("https://", ""), custom_filters=custom_filters
+        )
+        return commands
+
     def update_runtime_choices(self):
         # Load in any newly exported files
         self.DATA_FILES = forecast_model.get_default_files()
-        if session and obbff.USE_PROMPT_TOOLKIT:
-            choices: dict = self.choices_default
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
+            choices: dict = self.choices_default  # type: ignore
 
             self.choices = choices
             self.completer = NestedCompleter.from_nested_dict(choices)
@@ -251,12 +304,14 @@ class ForecastController(BaseController):
 
     def print_help(self):
         """Print help"""
+        current_user = get_current_user()
         mt = MenuText("forecast/")
         mt.add_param("_disclaimer_", self.disclaimer)
         mt.add_raw("\n")
         mt.add_param(
             "_data_loc",
-            f"\n\t{USER_EXPORTS_DIRECTORY}\n\t{USER_CUSTOM_IMPORTS_DIRECTORY}",
+            f"\n\t{current_user.preferences.USER_EXPORTS_DIRECTORY}\n"
+            f"\t{current_user.preferences.USER_CUSTOM_IMPORTS_DIRECTORY}",
         )
         mt.add_raw("\n")
         mt.add_cmd("load")
@@ -267,6 +322,7 @@ class ForecastController(BaseController):
         mt.add_cmd("plot", self.files)
         mt.add_cmd("clean", self.files)
         mt.add_cmd("combine", self.files)
+        mt.add_cmd("setndays", self.ndays)
         mt.add_cmd("desc", self.files)
         mt.add_cmd("corr", self.files)
         mt.add_cmd("season", self.files)
@@ -303,6 +359,12 @@ class ForecastController(BaseController):
         mt.add_cmd("tcn", self.files)
         mt.add_cmd("trans", self.files)
         mt.add_cmd("tft", self.files)
+        mt.add_raw("\n")
+        mt.add_info("_anomaly_")
+        mt.add_cmd("anom", self.files)
+        mt.add_raw("\n")
+        mt.add_info("_misc_")
+        mt.add_cmd("whisper", WHISPER_AVAILABLE)
 
         console.print(text=mt.menu_text, menu="Forecast")
 
@@ -353,6 +415,7 @@ class ForecastController(BaseController):
         naive: bool = False,
         explainability_raw: bool = False,
         export_pred_raw: bool = False,
+        metric: bool = False,
     ):
         if hidden_size:
             parser.add_argument(
@@ -421,7 +484,7 @@ class ForecastController(BaseController):
                 action="store",
                 dest="n_days",
                 type=check_positive,
-                default=5,
+                default=self.ndays,
                 help="prediction days.",
             )
         if seasonal is not None:
@@ -528,7 +591,7 @@ class ForecastController(BaseController):
                 action="store",
                 dest="model_type",
                 default="LSTM",
-                help='Either a string specifying the RNN module type ("RNN", "LSTM" or "GRU")',
+                help='Enter a string specifying the RNN module type ("RNN", "LSTM" or "GRU")',
             )
         if dropout is not None:
             parser.add_argument(
@@ -628,6 +691,17 @@ class ForecastController(BaseController):
                 help="Export predictions to a csv file.",
             )
 
+        if metric:
+            parser.add_argument(
+                "--metric",
+                type=str,
+                action="store",
+                dest="metric",
+                default="mape",
+                choices=["rmse", "mse", "mape", "smape"],
+                help="Calculate precision based on a specific metric (rmse, mse, mape)",
+            )
+
             # if user does not put in --dataset
         return parser
 
@@ -698,6 +772,14 @@ class ForecastController(BaseController):
             help="Alias name to give to the dataset",
             type=str,
         )
+        parser.add_argument(
+            "--sheet-name",
+            dest="sheet_name",
+            default=None,
+            nargs="+",
+            help="Name of excel sheet to save data to. Only valid for .xlsx files.",
+        )
+
         # Load in any newly exported files
         self.DATA_FILES = forecast_model.get_default_files()
 
@@ -722,7 +804,14 @@ class ForecastController(BaseController):
                         "[red]The file/dataset selected has already been loaded.[/red]\n"
                     )
                     return
-                data = common_model.load(file, self.DATA_FILES, {})
+                data = common_model.load(
+                    file,
+                    data_files=self.DATA_FILES,
+                    data_examples={},
+                    sheet_name=" ".join(ns_parser.sheet_name)
+                    if ns_parser.sheet_name
+                    else None,
+                )
                 if not data.empty:
                     self.files_full.append([ns_parser.file, ns_parser.alias])
                     self.load(alias, data)
@@ -744,7 +833,6 @@ class ForecastController(BaseController):
         )
 
         if ns_parser:
-
             console.print(
                 f"[green]Current Compute Device (CPU or GPU):[/green] {self.device.upper()}"
             )
@@ -897,6 +985,35 @@ class ForecastController(BaseController):
                 f"[green]Successfully renamed {column_old} into {column_new}, in {dataset}[/green]"
             )
 
+    @log_start_end(log=logger)
+    def call_setndays(self, other_args: List[str]):
+        """Process setndays command"""
+        parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            prog="setndays",
+            description="Set the number of days to forecast",
+        )
+        parser.add_argument(
+            "-n",
+            "--n-days",
+            help="Number of days to forecast",
+            dest="n_days",
+            type=check_positive,
+            default=5,
+        )
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "-n")
+
+        ns_parser = self.parse_known_args_and_warn(parser, other_args, NO_EXPORT)
+
+        if ns_parser:
+            self.ndays = ns_parser.n_days
+            console.print(
+                f"[green]Number of days to forecast set to {self.ndays}[/green]"
+            )
+            self.update_runtime_choices()
+
     # Show selected dataframe on console
     @log_start_end(log=logger)
     def call_desc(self, other_args: List[str]):
@@ -926,7 +1043,14 @@ class ForecastController(BaseController):
                 return
 
             df = self.datasets[ns_parser.target_dataset]
-            forecast_view.describe_df(df, ns_parser.target_dataset, ns_parser.export)
+            forecast_view.describe_df(
+                df,
+                ns_parser.target_dataset,
+                ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
+            )
 
     @log_start_end(log=logger)
     def call_plot(self, other_args: List[str]):
@@ -1653,6 +1777,7 @@ class ForecastController(BaseController):
             self.datasets[ns_parser.target_dataset],
             ns_parser.type,
             ns_parser.target_dataset,
+            ns_parser.sheet_name,
         )
 
     # Best Statistical Model
@@ -2104,6 +2229,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2133,6 +2259,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2165,6 +2292,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2192,6 +2320,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2251,6 +2380,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2287,6 +2417,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2363,6 +2494,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2405,6 +2537,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2472,6 +2605,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2515,6 +2649,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2551,6 +2686,7 @@ class ForecastController(BaseController):
             naive=True,
             explainability_raw=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2585,6 +2721,7 @@ class ForecastController(BaseController):
                 naive=ns_parser.naive,
                 explainability_raw=ns_parser.explainability_raw,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2620,6 +2757,7 @@ class ForecastController(BaseController):
             naive=True,
             explainability_raw=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2653,6 +2791,7 @@ class ForecastController(BaseController):
                 naive=ns_parser.naive,
                 explainability_raw=ns_parser.explainability_raw,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2704,6 +2843,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2745,6 +2885,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2832,6 +2973,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2875,6 +3017,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -2948,6 +3091,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -2991,6 +3135,7 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
             )
 
     @log_start_end(log=logger)
@@ -3082,6 +3227,7 @@ class ForecastController(BaseController):
             end=True,
             naive=True,
             export_pred_raw=True,
+            metric=True,
         )
         ns_parser = self.parse_known_args_and_warn(
             parser,
@@ -3126,4 +3272,149 @@ class ForecastController(BaseController):
                 end_date=ns_parser.s_end_date,
                 naive=ns_parser.naive,
                 export_pred_raw=ns_parser.export_pred_raw,
+                metric=ns_parser.metric,
+            )
+
+    @log_start_end(log=logger)
+    def call_anom(self, other_args: List[str]):
+        """Process ANOM command"""
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            add_help=False,
+            prog="anom",
+            description="""
+                Perform a Quantile Anomaly detection on a given dataset:
+                https://unit8co.github.io/darts/generated_api/darts.ad.detectors.quantile_detector.html
+            """,
+        )
+
+        # if user does not put in --dataset
+        if other_args and "-" not in other_args[0][0]:
+            other_args.insert(0, "--dataset")
+
+        parser = self.add_standard_args(
+            parser,
+            train_split=True,
+            target_column=True,
+            target_dataset=True,
+            forecast_only=True,
+            start=True,
+            end=True,
+        )
+        ns_parser = self.parse_known_args_and_warn(
+            parser,
+            other_args,
+            export_allowed=EXPORT_ONLY_FIGURES_ALLOWED,
+        )
+
+        if ns_parser:
+            if not helpers.check_parser_input(ns_parser, self.datasets):
+                return
+
+            anom_view.display_anomaly_detection(
+                data=self.datasets[ns_parser.target_dataset],
+                dataset_name=ns_parser.target_dataset,
+                target_column=ns_parser.target_column,
+                train_split=ns_parser.train_split,
+                export=ns_parser.export,
+                start_date=ns_parser.s_start_date,
+                end_date=ns_parser.s_end_date,
+            )
+
+    @log_start_end(log=logger)
+    def call_whisper(self, other_args: List[str]):
+        """Utilize Whisper Model to transcribe a video. Currently only supports Youtube URLS"""
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            add_help=False,
+            prog="whisper",
+            description="""
+                Utilize Whisper Model to transcribe a video. Currently only supports Youtube URLS:
+                https://github.com/openai/whisper
+            """,
+        )
+        parser.add_argument(
+            "--video",
+            dest="video",
+            type=str,
+            default="",
+            help="video URLs to transcribe",
+        )
+        parser.add_argument(
+            "--model_name",
+            dest="model_name",
+            choices=whisper.available_models(),
+            default="base",
+            help="name of the Whisper model to use",
+        )
+        parser.add_argument(
+            "--subtitles_format",
+            dest="subtitles_format",
+            type=str,
+            choices=["vtt", "srt"],
+            help="the subtitle format to output",
+        )
+        parser.add_argument(
+            "--verbose",
+            dest="verbose",
+            type=str2bool,
+            default=False,
+            help="Whether to print out the progress and debug messages",
+        )
+        parser.add_argument(
+            "--task",
+            dest="task",
+            type=str,
+            choices=["transcribe", "translate"],
+            help="whether to perform X->X speech recognition ('transcribe') or X->English translation ('translate')",
+        )
+        parser.add_argument(
+            "--language",
+            dest="language",
+            type=str,
+            default=None,
+            choices=sorted(LANGUAGES.keys())
+            + sorted([k.title() for k in TO_LANGUAGE_CODE.keys()]),
+            help="language spoken in the audio, skip to perform language detection",
+        )
+        parser.add_argument(
+            "--breaklines",
+            dest="breaklines",
+            type=int,
+            default=0,
+            help="Whether to break lines into a bottom-heavy pyramid shape if line length exceeds N characters. 0 disables line breaking.",
+        )
+        parser.add_argument(
+            "--save",
+            dest="save",
+            type=str,
+            default=get_current_user().preferences.USER_FORECAST_WHISPER_DIRECTORY,
+            help="Directory to save the subtitles file",
+        )
+
+        parser = self.add_standard_args(
+            parser,
+        )
+        if other_args and "--video" not in other_args:
+            other_args.insert(0, "--video")
+        ns_parser = self.parse_known_args_and_warn(
+            parser,
+            other_args,
+        )
+
+        if ns_parser:
+            if ns_parser.save is None:
+                ns_parser.save = (
+                    get_current_user().preferences.USER_FORECAST_WHISPER_DIRECTORY
+                )
+
+            whisper_model.transcribe_and_summarize(
+                video=ns_parser.video,
+                model_name=ns_parser.model_name,
+                subtitles_format=ns_parser.subtitles_format,
+                verbose=ns_parser.verbose,
+                task=ns_parser.task,
+                language=ns_parser.language,
+                breaklines=ns_parser.breaklines,
+                output_dir=ns_parser.save,
             )

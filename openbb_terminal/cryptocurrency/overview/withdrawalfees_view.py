@@ -1,6 +1,7 @@
 """Withdrawal Fees view"""
 import logging
 import os
+from typing import Optional
 
 from openbb_terminal.cryptocurrency.overview.withdrawalfees_model import (
     get_crypto_withdrawal_fees,
@@ -15,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def display_overall_withdrawal_fees(limit: int = 15, export: str = "") -> None:
+def display_overall_withdrawal_fees(
+    limit: int = 15, export: str = "", sheet_name: Optional[str] = None
+) -> None:
     """Top coins withdrawal fees
     [Source: https://withdrawalfees.com/]
 
@@ -35,10 +38,12 @@ def display_overall_withdrawal_fees(limit: int = 15, export: str = "") -> None:
         console.print("\nWithdrawal fees on exchanges:")
 
         print_rich_table(
-            df_fees.head(limit),
+            df_fees,
             headers=list(df_fees.columns),
             show_index=False,
             title="Top Withdrawal Fees",
+            export=bool(export),
+            limit=limit,
         )
 
         export_data(
@@ -46,11 +51,14 @@ def display_overall_withdrawal_fees(limit: int = 15, export: str = "") -> None:
             os.path.dirname(os.path.abspath(__file__)),
             "withdrawal_fees",
             df_fees,
+            sheet_name,
         )
 
 
 @log_start_end(log=logger)
-def display_overall_exchange_withdrawal_fees(export: str = "") -> None:
+def display_overall_exchange_withdrawal_fees(
+    export: str = "", sheet_name: Optional[str] = None
+) -> None:
     """Exchange withdrawal fees
     [Source: https://withdrawalfees.com/]
 
@@ -72,6 +80,7 @@ def display_overall_exchange_withdrawal_fees(export: str = "") -> None:
             headers=list(df_fees.columns),
             show_index=False,
             title="Withdrawal Fees",
+            export=bool(export),
         )
 
         export_data(
@@ -79,11 +88,14 @@ def display_overall_exchange_withdrawal_fees(export: str = "") -> None:
             os.path.dirname(os.path.abspath(__file__)),
             "exchange_withdrawal_fees",
             df_fees,
+            sheet_name,
         )
 
 
 @log_start_end(log=logger)
-def display_crypto_withdrawal_fees(symbol: str, export: str = "") -> None:
+def display_crypto_withdrawal_fees(
+    symbol: str, export: str = "", sheet_name: Optional[str] = None
+) -> None:
     """Coin withdrawal fees per exchange
     [Source: https://withdrawalfees.com/]
 
@@ -110,6 +122,7 @@ def display_crypto_withdrawal_fees(symbol: str, export: str = "") -> None:
             headers=list(df_fees.columns),
             show_index=False,
             title="Withdrawal Fees per Exchange",
+            export=bool(export),
         )
 
         export_data(
@@ -117,4 +130,5 @@ def display_crypto_withdrawal_fees(symbol: str, export: str = "") -> None:
             os.path.dirname(os.path.abspath(__file__)),
             "crypto_withdrawal_fees",
             df_fees,
+            sheet_name,
         )

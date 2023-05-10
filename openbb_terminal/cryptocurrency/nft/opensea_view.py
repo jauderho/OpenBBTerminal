@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def display_collection_stats(slug: str, export: str):
+def display_collection_stats(slug: str, export: str, sheet_name: str):
     """Prints table showing collection stats. [Source: opensea.io]
 
     Parameters
@@ -33,6 +33,7 @@ def display_collection_stats(slug: str, export: str):
             headers=list(collection_stats_df.columns),
             show_index=False,
             title="Collection Stats",
+            export=bool(export),
         )
 
     export_data(
@@ -40,4 +41,5 @@ def display_collection_stats(slug: str, export: str):
         os.path.dirname(os.path.abspath(__file__)),
         "stats",
         collection_stats_df,
+        sheet_name,
     )

@@ -1,6 +1,7 @@
 """Rekt view"""
 import logging
 import os
+from typing import Optional
 
 from openbb_terminal.cryptocurrency.overview import rekt_model
 from openbb_terminal.decorators import log_start_end
@@ -21,6 +22,7 @@ def display_crypto_hacks(
     ascend: bool = False,
     slug: str = "polyntwork-rekt",
     export: str = "",
+    sheet_name: Optional[str] = None,
 ) -> None:
     """Display list of major crypto-related hacks. If slug is passed
     individual crypto hack is displayed instead of list of crypto hacks
@@ -48,6 +50,7 @@ def display_crypto_hacks(
             os.path.dirname(os.path.abspath(__file__)),
             "ch",
             text,
+            sheet_name,
         )
     else:
         df = rekt_model.get_crypto_hacks(sortby, ascend)
@@ -61,11 +64,13 @@ def display_crypto_hacks(
             df["Date"] = df["Date"].dt.date
 
             print_rich_table(
-                df.head(limit),
+                df,
                 headers=list(df.columns),
                 floatfmt=".1f",
                 show_index=False,
                 title="Major Crypto Hacks",
+                export=bool(export),
+                limit=limit,
             )
 
             export_data(
@@ -73,4 +78,5 @@ def display_crypto_hacks(
                 os.path.dirname(os.path.abspath(__file__)),
                 "ch",
                 df,
+                sheet_name,
             )

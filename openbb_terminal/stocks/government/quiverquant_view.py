@@ -3,26 +3,18 @@ __docformat__ = "numpy"
 
 import logging
 import os
-from typing import List, Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
-import matplotlib
 
-from openbb_terminal.config_terminal import theme
-from openbb_terminal.config_plot import PLOT_DPI
+from openbb_terminal import OpenBBFigure, theme
 from openbb_terminal.decorators import log_start_end
-from openbb_terminal.helper_funcs import (
-    export_data,
-    plot_autoscale,
-    print_rich_table,
-    is_valid_axes_count,
-)
+from openbb_terminal.helper_funcs import export_data, print_rich_table
 from openbb_terminal.rich_config import console
 from openbb_terminal.stocks.government import quiverquant_model
 
-# pylint: disable=C0302
+# pylint: disable=C0302,inconsistent-return-statements
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +26,7 @@ def display_last_government(
     limit: int = 5,
     representative: str = "",
     export: str = "",
+    sheet_name: Optional[str] = None,
 ):
     """Display last government trading [Source: quiverquant.com]
 
@@ -45,6 +38,8 @@ def display_last_government(
         Number of days to look back
     representative: str
         Specific representative to look at
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
     """
@@ -68,10 +63,15 @@ def display_last_government(
         headers=list(df_gov.columns),
         show_index=False,
         title="Representative Trading",
+        export=bool(export),
     )
 
     export_data(
-        export, os.path.dirname(os.path.abspath(__file__)), "lasttrades", df_gov
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "lasttrades",
+        df_gov,
+        sheet_name,
     )
 
 
@@ -82,7 +82,8 @@ def display_government_buys(
     limit: int = 10,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Top buy government trading [Source: quiverquant.com]
 
@@ -96,10 +97,12 @@ def display_government_buys(
         Number of tickers to show
     raw: bool
         Display raw data
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
 
     """
     df_gov = quiverquant_model.get_government_buys(gov_type, past_transactions_months)
@@ -117,34 +120,40 @@ def display_government_buys(
             .head(n=limit)
         )
         print_rich_table(
-            df, headers=["Amount ($1k)"], show_index=True, title="Top Government Buys"
+            df,
+            headers=["Amount ($1k)"],
+            show_index=True,
+            title="Top Government Buys",
+            export=bool(export),
         )
 
-    # This plot has 1 axis
-    if not external_axes:
-        _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-    elif is_valid_axes_count(external_axes, 1):
-        (ax,) = external_axes
-    else:
-        return
+    df_gov_sorted = (
+        df_gov.groupby("Ticker")["upper"]
+        .sum()
+        .div(1000)
+        .sort_values(ascending=False)
+        .head(n=limit)
+    )
 
-    colors = theme.get_colors()
-    df_gov.groupby("Ticker")["upper"].sum().div(1000).sort_values(ascending=False).head(
-        n=limit
-    ).plot(kind="bar", rot=0, ax=ax, color=colors)
-
-    ax.set_ylabel("Amount [1k $]")
-    ax.set_title(
+    fig = OpenBBFigure(xaxis_title="Ticker", yaxis_title="Amount [1k $]")
+    fig.set_title(
         f"{gov_type.upper()}'s top {limit} purchased stocks (upper) in last {past_transactions_months} months"
     )
-    # plt.gcf().axes[0].yaxis.get_major_formatter().set_scientific(False)
 
-    theme.style_primary_axis(ax)
+    fig.add_bar(
+        x=df_gov_sorted.index, y=df_gov_sorted.values, marker_color=theme.get_colors()
+    )
 
-    if not external_axes:
-        theme.visualize_output()
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "topbuys",
+        df_gov,
+        sheet_name,
+        fig,
+    )
 
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "topbuys", df_gov)
+    return fig.show(external=raw or external_axes)
 
 
 @log_start_end(log=logger)
@@ -154,7 +163,8 @@ def display_government_sells(
     limit: int = 10,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Top sell government trading [Source: quiverquant.com]
 
@@ -168,10 +178,12 @@ def display_government_sells(
         Number of tickers to show
     raw: bool
         Display raw data
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
     df_gov = quiverquant_model.get_government_sells(gov_type, past_transactions_months)
 
@@ -193,32 +205,38 @@ def display_government_sells(
             headers=["Amount ($1k)"],
             show_index=True,
             title="Top Government Trades",
+            export=bool(export),
         )
 
-    # This plot has 1 axis
-    if not external_axes:
-        _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-    elif is_valid_axes_count(external_axes, 1):
-        (ax,) = external_axes
-    else:
-        return
+    df_gov_sorted = (
+        df_gov.groupby("Ticker")["upper"]
+        .sum()
+        .div(1000)
+        .sort_values()
+        .abs()
+        .head(n=limit)
+    )
 
-    colors = theme.get_colors()
-    df_gov.groupby("Ticker")["upper"].sum().div(1000).sort_values().abs().head(
-        n=limit
-    ).plot(kind="bar", rot=0, ax=ax, color=colors)
-    ax.set_ylabel("Amount ($1k)")
-    ax.set_title(
+    fig = OpenBBFigure(xaxis_title="Ticker", yaxis_title="Amount ($1k)")
+    fig.set_title(
         f"{limit} most sold stocks over last {past_transactions_months} months"
         f" (upper bound) for {gov_type}"
     )
 
-    theme.style_primary_axis(ax)
+    fig.add_bar(
+        x=df_gov_sorted.index, y=df_gov_sorted.values, marker_color=theme.get_colors()
+    )
 
-    if not external_axes:
-        theme.visualize_output()
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "topsells",
+        df_gov,
+        sheet_name,
+        fig,
+    )
 
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "topsells", df_gov)
+    return fig.show(external=raw or external_axes)
 
 
 @log_start_end(log=logger)
@@ -227,7 +245,8 @@ def display_last_contracts(
     limit: int = 20,
     sum_contracts: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Last government contracts [Source: quiverquant.com]
 
@@ -239,43 +258,50 @@ def display_last_contracts(
         Number of contracts to show
     sum_contracts: bool
         Flag to show total amount of contracts given out.
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
+
     df = quiverquant_model.get_last_contracts(past_transaction_days)
 
     if df.empty:
         return
 
     print_rich_table(
-        df[:limit],
+        df,
         headers=list(df.columns),
         show_index=False,
         title="Last Government Contracts",
+        export=bool(export),
+        limit=limit,
     )
-    if sum_contracts:
 
-        # This plot has 1 axis
-        if not external_axes:
-            _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-        elif is_valid_axes_count(external_axes, 1):
-            (ax,) = external_axes
-        else:
-            return
+    df["Date"] = pd.to_datetime(df["Date"], format="%Y-%m-%d").dt.date
+    df = df.groupby("Date").sum(True).div(1000)
 
-        df["Date"] = pd.to_datetime(df["Date"]).dt.date
-        df.groupby("Date").sum().div(1000).plot(kind="bar", rot=0, ax=ax)
-        ax.set_ylabel("Amount ($1k)")
-        ax.set_title("Total amount of government contracts given")
+    fig = OpenBBFigure(yaxis_title="Amount ($1k)", xaxis_title="Date")
+    fig.set_title("Total amount of government contracts given")
 
-        theme.style_primary_axis(ax)
+    fig.add_bar(x=df.index, y=df["Amount"].values, marker_color=theme.get_colors())
+    fig.update_layout(xaxis=dict(nticks=min(len(df.index) + 1, 10)))
 
-        if not external_axes:
-            theme.visualize_output()
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "lastcontracts",
+        df,
+        sheet_name,
+        fig,
+    )
 
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "lastcontracts", df)
+    if not sum_contracts:
+        return
+
+    return fig.show(external=external_axes)
 
 
 @log_start_end(log=logger)
@@ -283,8 +309,8 @@ def plot_government(
     government: pd.DataFrame,
     symbol: str,
     gov_type: str,
-    external_axes: Optional[List[plt.Axes]] = None,
-):
+    external_axes: bool = False,
+) -> Optional[OpenBBFigure]:
     """Helper for plotting government trading
 
     Parameters
@@ -295,36 +321,29 @@ def plot_government(
         Ticker symbol to plot government trading
     gov_type: str
         Type of government data between: congress, senate and house
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
-    # This plot has 1 axis
-    if not external_axes:
-        _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-    elif is_valid_axes_count(external_axes, 1):
-        (ax,) = external_axes
-    else:
-        return
 
-    ax.fill_between(
-        government["TransactionDate"].unique(),
-        government.groupby("TransactionDate")["lower"].sum().values / 1000,
-        government.groupby("TransactionDate")["upper"].sum().values / 1000,
+    fig = OpenBBFigure(yaxis_title="Amount ($1k)", xaxis_title="Date")
+    fig.set_title(f"{gov_type.capitalize()} trading on {symbol}")
+
+    fig.add_scatter(
+        name="lower",
+        x=government["TransactionDate"].unique(),
+        y=government.groupby("TransactionDate")["lower"].sum().values / 1000,
+    )
+    fig.add_scatter(
+        name="upper",
+        x=government["TransactionDate"].unique(),
+        y=government.groupby("TransactionDate")["upper"].sum().values / 1000,
     )
 
-    ax.set_xlim(
-        [
-            government["TransactionDate"].values[0],
-            government["TransactionDate"].values[-1],
-        ]
-    )
-    ax.set_title(f"{gov_type.capitalize()} trading on {symbol}")
-    ax.set_ylabel("Amount ($1k)")
+    color = theme.get_colors()[0]
+    fig.update_traces(mode="lines", line_color=color, fillcolor=color, fill="tonexty")
+    fig.update_layout(showlegend=False)
 
-    theme.style_primary_axis(ax)
-
-    if not external_axes:
-        theme.visualize_output()
+    return fig.show(external=external_axes)
 
 
 @log_start_end(log=logger)
@@ -334,7 +353,8 @@ def display_government_trading(
     past_transactions_months: int = 6,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Government trading for specific ticker [Source: quiverquant.com]
 
@@ -348,10 +368,12 @@ def display_government_trading(
         Number of months to get transactions for
     raw: bool
         Show raw output of trades
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
     df_gov = quiverquant_model.get_cleaned_government_trading(
         symbol=symbol,
@@ -359,21 +381,30 @@ def display_government_trading(
         past_transactions_months=past_transactions_months,
     )
 
-    if df_gov.empty:
-        console.print(f"No {gov_type} trading data found\n")
-        return
+    if df_gov is None or isinstance(df_gov, pd.DataFrame) and df_gov.empty:
+        return console.print(f"No {gov_type} trading data found\n")
+
+    fig = plot_government(df_gov, symbol, gov_type, True)
+
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "gtrades",
+        df_gov,
+        sheet_name,
+        fig,
+    )
 
     if raw:
-        print_rich_table(
+        return print_rich_table(
             df_gov,
             headers=list(df_gov.columns),
             show_index=False,
             title=f"Government Trading for {symbol.upper()}",
+            export=bool(export),
         )
-    else:
-        plot_government(df_gov, symbol, gov_type, external_axes)
 
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "gtrades", df_gov)
+    return fig.show(external=external_axes)
 
 
 @log_start_end(log=logger)
@@ -382,7 +413,8 @@ def display_contracts(
     past_transaction_days: int = 10,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Show government contracts for ticker [Source: quiverquant.com]
 
@@ -394,10 +426,12 @@ def display_contracts(
         Number of days to get transactions for
     raw: bool
         Flag to display raw data
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
     df_contracts = quiverquant_model.get_contracts(symbol, past_transaction_days)
 
@@ -410,36 +444,34 @@ def display_contracts(
             headers=list(df_contracts.columns),
             show_index=False,
             title=f"Government Contracts for {symbol.upper()}",
+            export=bool(export),
         )
-
-    if df_contracts.Amount.abs().sum() != 0:
-
-        # This plot has 1 axis
-        if not external_axes:
-            _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-        elif is_valid_axes_count(external_axes, 1):
-            (ax,) = external_axes
-        else:
-            return
-
-        df_contracts.groupby("Date").sum(numeric_only=True).div(1000).plot(
-            kind="bar", rot=0, ax=ax
-        )
-        ax.set_ylabel("Amount ($1k)")
-        ax.set_title(f"Sum of latest government contracts to {symbol}")
-
-        ax.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(4))
-
-        theme.style_primary_axis(ax)
-
-        if not external_axes:
-            theme.visualize_output()
 
     if df_contracts.Amount.abs().sum() == 0:
-        console.print("Contracts found, but they are all equal to $0.00.\n")
-    export_data(
-        export, os.path.dirname(os.path.abspath(__file__)), "contracts", df_contracts
+        return console.print("Contracts found, but they are all equal to $0.00.\n")
+
+    fig = OpenBBFigure(yaxis_title="Amount ($1k)", xaxis_title="Date")
+    fig.set_title(f"Sum of latest government contracts to {symbol}")
+
+    df_contracts_grouped = df_contracts.groupby("Date").sum(numeric_only=True)
+
+    fig.add_bar(
+        name="Amount",
+        x=df_contracts["Date"].unique(),
+        y=df_contracts_grouped["Amount"].values / 1000,
     )
+    fig.update_layout(xaxis=dict(type="category"))
+
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "contracts",
+        df_contracts,
+        sheet_name,
+        fig,
+    )
+
+    return fig.show(external=raw or external_axes)
 
 
 @log_start_end(log=logger)
@@ -448,8 +480,9 @@ def display_qtr_contracts(
     limit: int = 5,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
-):
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
+) -> Union[OpenBBFigure, None]:
     """Quarterly contracts [Source: quiverquant.com]
 
     Parameters
@@ -460,87 +493,105 @@ def display_qtr_contracts(
         Number to show
     raw: bool
         Flag to display raw data
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
-
     symbols = quiverquant_model.get_qtr_contracts(analysis, limit)
 
     if symbols.empty:
-        return
+        return None
 
     if analysis in ("upmom", "downmom"):
         if raw:
-            print_rich_table(
+            return print_rich_table(
                 pd.DataFrame(symbols.values),
                 headers=["symbols"],
                 show_index=True,
                 title="Quarterly Contracts",
             )
-        else:
-            # This plot has 1 axis
-            if not external_axes:
-                _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-            elif is_valid_axes_count(external_axes, 1):
-                (ax,) = external_axes
-            else:
-                return
 
-            max_amount = 0
-            quarter_ticks = []
-            df_contracts = quiverquant_model.get_government_trading("quarter-contracts")
-            for symbol in symbols:
-                amounts = (
-                    df_contracts[df_contracts["Ticker"] == symbol]
-                    .sort_values(by=["Year", "Qtr"])["Amount"]
-                    .values
+        titles = {
+            "upmom": "Highest increasing quarterly Government Contracts",
+            "downmom": "Highest decreasing quarterly Government Contracts",
+        }
+
+        fig = OpenBBFigure(xaxis_title="Quarter", yaxis_title="Amount ($1M)")
+
+        fig.set_title(title=titles[analysis])
+
+        max_amount = 0
+        quarter_ticks = []
+        df_contracts = quiverquant_model.get_government_trading("quarter-contracts")
+        for symbol in symbols:
+            amounts = (
+                df_contracts[df_contracts["Ticker"] == symbol]
+                .sort_values(by=["Year", "Qtr"])["Amount"]
+                .values
+            )
+
+            qtr = (
+                df_contracts[df_contracts["Ticker"] == symbol]
+                .sort_values(by=["Year", "Qtr"])["Qtr"]
+                .values
+            )
+            year = (
+                df_contracts[df_contracts["Ticker"] == symbol]
+                .sort_values(by=["Year", "Qtr"])["Year"]
+                .values
+            )
+
+            fig.add_scatter(
+                x=np.arange(0, len(amounts)),
+                y=amounts / 1_000_000,
+                mode="lines+markers",
+                name=symbol,
+                marker=dict(size=16, line=dict(width=0), symbol="star"),
+            )
+
+            if len(amounts) > max_amount:
+                max_amount = len(amounts)
+                quarter_ticks = [
+                    f"{quarter[0]} - Q{quarter[1]} " for quarter in zip(year, qtr)
+                ]
+                fig.update_layout(
+                    xaxis=dict(
+                        tickmode="array",
+                        tickvals=np.arange(0, len(amounts)),
+                        ticktext=quarter_ticks,
+                    )
                 )
 
-                qtr = (
-                    df_contracts[df_contracts["Ticker"] == symbol]
-                    .sort_values(by=["Year", "Qtr"])["Qtr"]
-                    .values
+                export_data(
+                    export,
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "qtrcontracts",
+                    symbols,
+                    sheet_name,
+                    fig,
                 )
-                year = (
-                    df_contracts[df_contracts["Ticker"] == symbol]
-                    .sort_values(by=["Year", "Qtr"])["Year"]
-                    .values
-                )
+            return fig.show(external=external_axes)
 
-                ax.plot(
-                    np.arange(0, len(amounts)), amounts / 1_000_000, "-*", lw=2, ms=15
-                )
-
-                if len(amounts) > max_amount:
-                    max_amount = len(amounts)
-                    quarter_ticks = [
-                        f"{quarter[0]} - Q{quarter[1]} " for quarter in zip(year, qtr)
-                    ]
-
-            ax.set_xlim([-0.5, max_amount - 0.5])
-            ax.set_xticks(np.arange(0, max_amount))
-            ax.set_xticklabels(quarter_ticks)
-            ax.legend(symbols)
-            titles = {
-                "upmom": "Highest increasing quarterly Government Contracts",
-                "downmom": "Highest decreasing quarterly Government Contracts",
-            }
-            ax.set_title(titles[analysis])
-            ax.set_ylabel("Amount ($1M)")
-
-            if not external_axes:
-                theme.visualize_output()
-
-    elif analysis == "total":
+    if analysis == "total":
         print_rich_table(
-            symbols, headers=["Total"], title="Quarterly Contracts", show_index=True
+            symbols,
+            headers=["Total"],
+            title="Quarterly Contracts",
+            show_index=True,
+            export=bool(export),
         )
 
     export_data(
-        export, os.path.dirname(os.path.abspath(__file__)), "qtrcontracts", symbols
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "qtrcontracts",
+        symbols,
+        sheet_name,
     )
+    return None
 
 
 @log_start_end(log=logger)
@@ -548,7 +599,8 @@ def display_hist_contracts(
     symbol: str,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Show historical quarterly government contracts [Source: quiverquant.com]
 
@@ -558,64 +610,70 @@ def display_hist_contracts(
         Ticker symbol to get congress trading data from
     raw: bool
         Flag to display raw data
+    sheet_name: str
+        Optionally specify the name of the sheet the data is exported to.
     export: str
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
     """
     df_contracts = quiverquant_model.get_hist_contracts(symbol)
 
     if df_contracts.empty:
-        return
+        return None
+
+    amounts = df_contracts.sort_values(by=["Year", "Qtr"])["Amount"].values
+
+    qtr = df_contracts.sort_values(by=["Year", "Qtr"])["Qtr"].values
+    year = df_contracts.sort_values(by=["Year", "Qtr"])["Year"].values
+
+    quarter_ticks = [
+        f"{quarter[0]}" if quarter[1] == 1 else "" for quarter in zip(year, qtr)
+    ]
+
+    fig = OpenBBFigure(
+        xaxis=dict(
+            title="Quarter",
+            tickmode="array",
+            tickvals=np.arange(0, len(amounts)),
+            ticktext=quarter_ticks,
+        ),
+        yaxis_title="Amount ($1k)",
+    )
+
+    fig.set_title(f"Historical Quarterly Government Contracts for {symbol.upper()}")
+
+    fig.add_scatter(
+        x=np.arange(0, len(amounts)),
+        y=amounts / 1000,
+        mode="lines+markers",
+        name=symbol,
+        marker=dict(
+            size=15,
+            line=dict(width=2, color=theme.get_colors()[0]),
+            color=theme.down_color,
+        ),
+        line=dict(color=theme.get_colors()[0]),
+    )
+
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "histcont",
+        sheet_name=sheet_name,
+        figure=fig,
+    )
 
     if raw:
-        print_rich_table(
+        return print_rich_table(
             df_contracts,
             headers=list(df_contracts.columns),
             floatfmt=[".0f", ".0f", ".2f"],
             title="Historical Quarterly Government Contracts",
+            export=bool(export),
         )
 
-    else:
-        amounts = df_contracts.sort_values(by=["Year", "Qtr"])["Amount"].values
-
-        qtr = df_contracts.sort_values(by=["Year", "Qtr"])["Qtr"].values
-        year = df_contracts.sort_values(by=["Year", "Qtr"])["Year"].values
-
-        quarter_ticks = [
-            f"{quarter[0]}" if quarter[1] == 1 else "" for quarter in zip(year, qtr)
-        ]
-
-        # This plot has 1 axis
-        if not external_axes:
-            _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-        elif is_valid_axes_count(external_axes, 1):
-            (ax,) = external_axes
-        else:
-            return
-
-        ax.plot(
-            np.arange(0, len(amounts)),
-            amounts / 1000,
-            marker=".",
-            markerfacecolor=theme.down_color,
-            lw=2,
-            ms=15,
-        )
-
-        ax.set_xlim([-0.5, len(amounts) - 0.5])
-        ax.set_xticks(np.arange(0, len(amounts)))
-        ax.set_xticklabels(quarter_ticks)
-
-        ax.set_title(f"Historical Quarterly Government Contracts for {symbol.upper()}")
-        ax.set_ylabel("Amount ($1k)")
-
-        theme.style_primary_axis(ax)
-
-        if not external_axes:
-            theme.visualize_output()
-
-    export_data(export, os.path.dirname(os.path.abspath(__file__)), "histcont")
+    return fig.show(external=external_axes)
 
 
 @log_start_end(log=logger)
@@ -623,7 +681,8 @@ def display_top_lobbying(
     limit: int = 10,
     raw: bool = False,
     export: str = "",
-    external_axes: Optional[List[plt.Axes]] = None,
+    sheet_name: Optional[str] = None,
+    external_axes: bool = False,
 ):
     """Top lobbying tickers based on total spent
 
@@ -635,8 +694,8 @@ def display_top_lobbying(
         Show raw data
     export:
         Format to export data
-    external_axes : Optional[List[plt.Axes]], optional
-        External axes (1 axis is expected in the list), by default None
+    external_axes : bool, optional
+        Whether to return the figure object or not, by default False
 
     """
     df_lobbying = quiverquant_model.get_top_lobbying()
@@ -650,37 +709,38 @@ def display_top_lobbying(
         df_lobbying.groupby("Ticker")["Amount"].agg("sum")
     ).sort_values(by="Amount", ascending=False)
 
+    df = lobbying_by_ticker.head(limit)
+
+    fig = OpenBBFigure(xaxis_title="Ticker", yaxis_title="Total Amount ($100k)")
+    fig.set_title(f"Corporate Lobbying Spent since {df_lobbying['Date'].min()}")
+
+    fig.add_bar(
+        x=df.index,
+        y=df.Amount,
+        name="Amount ($100k)",
+        marker_color=theme.get_colors(),
+    )
+
+    export_data(
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        "lobbying",
+        df_lobbying,
+        sheet_name,
+        fig,
+    )
+
     if raw:
-        print_rich_table(
-            lobbying_by_ticker.head(limit),
+        return print_rich_table(
+            lobbying_by_ticker,
             headers=["Amount ($100k)"],
             show_index=True,
             title="Top Lobbying Tickers",
+            export=bool(export),
+            limit=limit,
         )
-    else:
 
-        # This plot has 1 axis
-        if not external_axes:
-            _, ax = plt.subplots(figsize=plot_autoscale(), dpi=PLOT_DPI)
-        elif is_valid_axes_count(external_axes, 1):
-            (ax,) = external_axes
-        else:
-            return
-
-        colors = theme.get_colors()
-        lobbying_by_ticker.head(limit).plot(kind="bar", ax=ax, color=colors)
-        ax.set_xlabel("Ticker")
-        ax.set_ylabel("Total Amount ($100k)")
-        ax.set_title(f"Corporate Lobbying Spent since {df_lobbying['Date'].min()}")
-
-        theme.style_primary_axis(ax)
-
-        if not external_axes:
-            theme.visualize_output()
-
-    export_data(
-        export, os.path.dirname(os.path.abspath(__file__)), "lobbying", df_lobbying
-    )
+    return fig.show(external=external_axes)
 
 
 @log_start_end(log=logger)

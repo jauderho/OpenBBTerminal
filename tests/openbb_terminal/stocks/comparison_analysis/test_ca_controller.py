@@ -1,4 +1,5 @@
 # IMPORTATION STANDARD
+
 import os
 
 # IMPORTATION THIRDPARTY
@@ -6,6 +7,10 @@ import pandas as pd
 import pytest
 
 # IMPORTATION INTERNAL
+from openbb_terminal.core.session.current_user import (
+    PreferencesModel,
+    copy_user,
+)
 from openbb_terminal.stocks.comparison_analysis import ca_controller
 
 # pylint: disable=E1101
@@ -41,9 +46,11 @@ def test_menu_with_queue(expected, mocker, queue):
 @pytest.mark.vcr(record_mode="none")
 def test_menu_without_queue_completion(mocker):
     # ENABLE AUTO-COMPLETION : HELPER_FUNCS.MENU
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
     mocker.patch(
-        target="openbb_terminal.feature_flags.USE_PROMPT_TOOLKIT",
-        new=True,
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target="openbb_terminal.parent_classes.session",
@@ -54,10 +61,11 @@ def test_menu_without_queue_completion(mocker):
     )
 
     # DISABLE AUTO-COMPLETION : CONTROLLER.COMPLETER
-    mocker.patch.object(
-        target=ca_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=True,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target="openbb_terminal.stocks.comparison_analysis.ca_controller.session",
@@ -82,10 +90,11 @@ def test_menu_without_queue_completion(mocker):
 )
 def test_menu_without_queue_sys_exit(mock_input, mocker):
     # DISABLE AUTO-COMPLETION
-    mocker.patch.object(
-        target=ca_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=False,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target="openbb_terminal.stocks.comparison_analysis.ca_controller.session",
@@ -236,14 +245,17 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 "--type=h",
                 "--no-scale",
                 "--start=2020-12-01",
+                "--end=2022-12-11",
                 "--export=csv",
             ],
             dict(
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 start_date="2020-12-01",
+                end_date="2022-12-11",
                 candle_type="h",
                 normalize=False,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -252,12 +264,15 @@ def test_call_func_expect_queue(expected_queue, queue, func):
             [
                 "--type=h",
                 "--start=2020-12-01",
+                "--end=2022-12-11",
             ],
             dict(
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 start_date="2020-12-01",
+                end_date="2022-12-11",
                 candle_type="h",
                 export="",
+                sheet_name=None,
                 display_full_matrix=False,
                 raw=False,
             ),
@@ -267,12 +282,15 @@ def test_call_func_expect_queue(expected_queue, queue, func):
             "yahoo_finance_view.display_volume",
             [
                 "--start=2020-12-01",
+                "--end=2022-12-11",
                 "--export=csv",
             ],
             dict(
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 start_date="2020-12-01",
+                end_date="2022-12-11",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -287,6 +305,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 timeframe="MOCK_TIMEFRAME",
                 quarter=True,
                 export="",
+                sheet_name=None,
             ),
         ),
         (
@@ -302,6 +321,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 timeframe="MOCK_TIMEFRAME",
                 quarter=True,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -317,6 +337,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 timeframe="MOCK_TIMEFRAME",
                 quarter=True,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -330,6 +351,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 raw=True,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -343,6 +365,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 raw=True,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -355,6 +378,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="overview",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -367,6 +391,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="valuation",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -379,6 +404,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="financial",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -391,6 +417,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="ownership",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -403,6 +430,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="performance",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -415,6 +443,7 @@ def test_call_func_expect_queue(expected_queue, queue, func):
                 similar=["MOCK_SIMILAR_1", "MOCK_SIMILAR_2"],
                 data_type="technical",
                 export="csv",
+                sheet_name=None,
             ),
         ),
     ],

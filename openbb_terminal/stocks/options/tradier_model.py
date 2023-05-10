@@ -7,9 +7,10 @@ from typing import List, Optional
 import pandas as pd
 import requests
 
-from openbb_terminal import config_terminal as cfg
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.decorators import check_api_key, log_start_end
-from openbb_terminal.rich_config import console
+from openbb_terminal.helper_funcs import request
+from openbb_terminal.rich_config import console, optional_rich_track
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,22 @@ default_columns = [
     "open_interest",
     "bid",
     "ask",
+]
+
+sorted_chain_columns = [
+    "symbol",
+    "option_type",
+    "expiration",
+    "strike",
+    "bid",
+    "ask",
+    "open_interest",
+    "volume",
+    "mid_iv",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
 ]
 
 
@@ -73,25 +90,24 @@ def get_historical_options(
     """
     if not chain_id:
         op_type = ["call", "put"][put]
-        chain = get_option_chains(symbol, expiry)
+        chain = get_option_chain(symbol, expiry)
+        chain = chain[chain["option_type"] == op_type]
 
         try:
-            symbol = chain[(chain.strike == strike) & (chain.option_type == op_type)][
-                "symbol"
-            ].values[0]
+            symbol = chain[(chain.strike == strike)]["symbol"].values[0]
         except IndexError:
-            error = f"Strike: {strike}, Option type: {op_type} not not found"
+            error = f"Strike: {strike}, Option type: {op_type} not found"
             logging.exception(error)
             console.print(f"{error}\n")
             return pd.DataFrame()
     else:
         symbol = chain_id
 
-    response = requests.get(
+    response = request(
         "https://sandbox.tradier.com/v1/markets/history",
         params={"symbol": {symbol}, "interval": "daily"},
         headers={
-            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
+            "Authorization": f"Bearer {get_current_user().credentials.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )
@@ -127,95 +143,39 @@ option_col_map = {"open_interest": "openinterest", "mid_iv": "iv"}
 
 @log_start_end(log=logger)
 @check_api_key(["API_TRADIER_TOKEN"])
-def get_full_option_chain(symbol: str) -> pd.DataFrame:
+def get_full_option_chain(symbol: str, quiet: bool = False) -> pd.DataFrame:
     """Get available expiration dates for given ticker
 
     Parameters
     ----------
     symbol: str
         Ticker symbol to get expirations for
+    quiet: bool
+        Suppress output of progress bar
 
     Returns
     -------
     pd.DataFrame
-       Dataframe of all option chains
+        Dataframe of all option chains
     """
 
     expirations = option_expirations(symbol)
     options_dfs: pd.DataFrame = []
 
-    for expiry in expirations:
-        options_dfs.append(get_option_chains(symbol, expiry))
-
-    options_df = pd.concat(options_dfs)
-
-    options_df.set_index(keys="symbol", inplace=True)
-
-    option_df_index = pd.Series(options_df.index).str.extractall(
-        r"^(?P<Ticker>\D*)(?P<Expiration>\d*)(?P<Type>\D*)(?P<Strike>\d*)"
-    )
-    option_df_index.reset_index(inplace=True)
-    option_df_index = pd.DataFrame(
-        option_df_index, columns=["Ticker", "Expiration", "Strike", "Type"]
-    )
-    option_df_index["Strike"] = options_df["strike"].values
-    option_df_index["Type"] = options_df["option_type"].values
-    option_df_index["Expiration"] = pd.DatetimeIndex(
-        data=option_df_index["Expiration"], yearfirst=True
-    ).strftime("%Y-%m-%d")
-    option_df_index["Type"] = pd.DataFrame(option_df_index["Type"]).replace(
-        to_replace=["put", "call"], value=["Put", "Call"]
-    )
-    options_df_columns = list(options_df.columns)
-    option_df_index.set_index(
-        keys=["Ticker", "Expiration", "Strike", "Type"], inplace=True
-    )
-    options_df = pd.DataFrame(
-        data=options_df.values, index=option_df_index.index, columns=options_df_columns
-    )
-
-    options_df.rename(
+    for expiry in optional_rich_track(
+        expirations, suppress_output=quiet, desc="Getting Option Chain"
+    ):
+        chain = get_option_chain(symbol, expiry)
+        options_dfs.append(chain)
+    chain = pd.concat(options_dfs)
+    chain = chain[sorted_chain_columns].rename(
         columns={
-            "bid": "Bid",
-            "ask": "Ask",
-            "strike": "Strike",
-            "bidsize": "Bid Size",
-            "asksize": "Ask Size",
-            "volume": "Volume",
-            "open_interest": "OI",
-            "delta": "Delta",
-            "gamma": "Gamma",
-            "theta": "Theta",
-            "vega": "Vega",
-            "ask_iv": "Ask IV",
-            "bid_iv": "Bid IV",
-            "mid_iv": "IV",
-        },
-        inplace=True,
+            "mid_iv": "iv",
+            "open_interest": "openInterest",
+            "option_type": "optionType",
+        }
     )
-
-    options_columns = [
-        "Volume",
-        "OI",
-        "IV",
-        "Delta",
-        "Gamma",
-        "Theta",
-        "Vega",
-        "Bid Size",
-        "Bid",
-        "Ask",
-        "Ask Size",
-        "Bid IV",
-        "Ask IV",
-    ]
-
-    options = pd.DataFrame(options_df, columns=options_columns)
-    options = options.reset_index()
-    options.drop(labels=["Ticker"], inplace=True, axis=1)
-    options.rename(columns={"Expiration": "expiration"}, inplace=True)
-
-    return options
+    return chain
 
 
 @log_start_end(log=logger)
@@ -233,11 +193,11 @@ def option_expirations(symbol: str) -> List[str]:
     dates: List[str]
         List of of available expirations
     """
-    r = requests.get(
+    r = request(
         "https://sandbox.tradier.com/v1/markets/options/expirations",
         params={"symbol": symbol, "includeAllRoots": "true", "strikes": "false"},
         headers={
-            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
+            "Authorization": f"Bearer {get_current_user().credentials.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )
@@ -256,7 +216,7 @@ def option_expirations(symbol: str) -> List[str]:
 
 @log_start_end(log=logger)
 @check_api_key(["API_TRADIER_TOKEN"])
-def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
+def get_option_chain(symbol: str, expiry: str) -> pd.DataFrame:
     """Display option chains [Source: Tradier]"
 
     Parameters
@@ -274,11 +234,11 @@ def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
     params = {"symbol": symbol, "expiration": expiry, "greeks": "true"}
 
     headers = {
-        "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
+        "Authorization": f"Bearer {get_current_user().credentials.API_TRADIER_TOKEN}",
         "Accept": "application/json",
     }
 
-    response = requests.get(
+    response = request(
         "https://sandbox.tradier.com/v1/markets/options/chains",
         params=params,
         headers=headers,
@@ -288,12 +248,13 @@ def get_option_chains(symbol: str, expiry: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     chains = process_chains(response)
+    chains["expiration"] = expiry
     return chains
 
 
 @log_start_end(log=logger)
 def process_chains(response: requests.models.Response) -> pd.DataFrame:
-    """Function to take in the requests.get and return a DataFrame
+    """Function to take in the request and return a DataFrame
 
     Parameters
     ----------
@@ -330,7 +291,7 @@ def process_chains(response: requests.models.Response) -> pd.DataFrame:
 
 @log_start_end(log=logger)
 @check_api_key(["API_TRADIER_TOKEN"])
-def last_price(symbol: str):
+def get_last_price(symbol: str):
     """Makes api request for last price
 
     Parameters
@@ -343,11 +304,11 @@ def last_price(symbol: str):
     float:
         Last price
     """
-    r = requests.get(
+    r = request(
         "https://sandbox.tradier.com/v1/markets/quotes",
         params={"symbols": symbol, "includeAllRoots": "true", "strikes": "false"},
         headers={
-            "Authorization": f"Bearer {cfg.API_TRADIER_TOKEN}",
+            "Authorization": f"Bearer {get_current_user().credentials.API_TRADIER_TOKEN}",
             "Accept": "application/json",
         },
     )

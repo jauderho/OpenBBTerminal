@@ -1,21 +1,21 @@
 ,Name,Chain,Protocol,APY (%),TVL ($),Link
-19,SHIT-WETH (1%),Ethereum,Uniswap,365.2 %,2.179 M,https://api.coindix.com/vault/162981/redirect
-18,ETH-cxETH,Polygon,Beefy,376.93 %,1.548 M,https://api.coindix.com/vault/72936/redirect
-17,WBTC-cxBTC,Polygon,Beefy,385.18 %,1.543 M,https://api.coindix.com/vault/150035/redirect
-16,GRAPE-MIM,Avalanche,Beefy,747.63 %,1.057 M,https://api.coindix.com/vault/50508/redirect
-0,WETH-10k,Ethereum,Uniswap,NA,1.699 M,https://api.coindix.com/vault/120568/redirect
-1,Azuki-WETH,Ethereum,Uniswap,NA,1.181 M,https://api.coindix.com/vault/113873/redirect
-2,WETH-RYOSHI,Ethereum,Uniswap,NA,1.569 M,https://api.coindix.com/vault/111282/redirect
-3,Hasbro-WETH,Ethereum,Uniswap,NA,1.025 M,https://api.coindix.com/vault/110372/redirect
-4,WETH-GENIE,Ethereum,Uniswap,NA,1.770 M,https://api.coindix.com/vault/118073/redirect
-5,WETH-PRAG,Ethereum,Uniswap,NA,1.359 M,https://api.coindix.com/vault/165735/redirect
-6,APELAND-WETH,Ethereum,Uniswap,NA,1.216 M,https://api.coindix.com/vault/113531/redirect
-7,Line-WETH,Ethereum,Uniswap,NA,2.065 M,https://api.coindix.com/vault/108126/redirect
-8,USDC-CRV,Ethereum,Uniswap,NA,1.722 M,https://api.coindix.com/vault/167534/redirect
-9,USDD-USDT (0.01%),Ethereum,Uniswap,NA,3.926 M,https://api.coindix.com/vault/121969/redirect
-10,WETH-DOODLE,Ethereum,Uniswap,NA,2.887 M,https://api.coindix.com/vault/97162/redirect
-11,HOOT-WETH,Ethereum,Uniswap,NA,1.474 M,https://api.coindix.com/vault/112952/redirect
-12,Firefox-WETH,Ethereum,Uniswap,NA,1.963 M,https://api.coindix.com/vault/95445/redirect
-13,WBTC-BBTC (0.05%),Ethereum,Uniswap,NA,4.200 M,https://api.coindix.com/vault/178382/redirect
-14,WETH-Richemont,Ethereum,Uniswap,NA,1.631 M,https://api.coindix.com/vault/104732/redirect
-15,WETH-OP,Ethereum,Uniswap,NA,1.665 M,https://api.coindix.com/vault/119426/redirect
+19,BTC.b-AVAX,Avalanche,Trader Joe,1.28,2447906,https://api.nanoly.com/vaults/184751/redirect
+18,LDO-WETH,Ethereum,Uniswap,1.3300697,9763869,https://api.nanoly.com/vaults/272232/redirect
+17,WMATIC-USDC,Polygon,Uniswap,1.3378611,6845295,https://api.nanoly.com/vaults/272192/redirect
+16,MAGIC-WETH,Arbitrum,Sushi,1.51100925,18056222,https://api.nanoly.com/vaults/13265/redirect
+15,WMATIC-USDT,Polygon,Uniswap,1.5272906,1791001,https://api.nanoly.com/vaults/273081/redirect
+14,WETH-USDT,Arbitrum,Uniswap,1.5718619,1126252,https://api.nanoly.com/vaults/272838/redirect
+13,MAGIC-ETH,Arbitrum,Beefy,1.60662408,2821521,https://api.nanoly.com/vaults/29232/redirect
+12,WETH-CRV,Ethereum,Uniswap,1.6795949,2316095,https://api.nanoly.com/vaults/273797/redirect
+11,WETH-OP,Optimism,Uniswap,1.7595914,10287442,https://api.nanoly.com/vaults/272183/redirect
+10,FXS-WETH,Ethereum,Uniswap,2.0582594,3994551,https://api.nanoly.com/vaults/272340/redirect
+9,AVAX-USDC,Avalanche,Trader Joe,2.1417,6652279,https://api.nanoly.com/vaults/32055/redirect
+8,USDC-CRV,Ethereum,Uniswap,2.30376,1106306,https://api.nanoly.com/vaults/272850/redirect
+7,WMATIC-CRV,Polygon,Uniswap,2.3040111,1229701,https://api.nanoly.com/vaults/273083/redirect
+6,APE-WETH,Ethereum,Uniswap,2.3316127,8071844,https://api.nanoly.com/vaults/272140/redirect
+5,OP-USDC,Optimism,Uniswap,2.4134576,2478859,https://api.nanoly.com/vaults/272424/redirect
+4,FTM-WETH,Ethereum,Uniswap,2.4265455,1710725,https://api.nanoly.com/vaults/272216/redirect
+3,DYDX-WETH,Ethereum,Uniswap,2.4461352,1486170,https://api.nanoly.com/vaults/272470/redirect
+2,LDO-WETH,Ethereum,Uniswap,3.2958058,4170799,https://api.nanoly.com/vaults/272170/redirect
+1,LCX-WETH,Ethereum,Uniswap,3.3537874,1059213,https://api.nanoly.com/vaults/272292/redirect
+0,MAGIC-WETH,Arbitrum,Uniswap,23.7902436,1041078,https://api.nanoly.com/vaults/273200/redirect

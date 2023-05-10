@@ -1,5 +1,4 @@
 # IMPORTATION STANDARD
-import os
 
 # IMPORTATION THIRDPARTY
 import pandas as pd
@@ -19,7 +18,6 @@ def vcr_config():
 @pytest.mark.vcr
 @pytest.mark.record_stdout
 def test_display_cmc_top_coins(mocker):
-
     # MOCK EXPORT_DATA
     mocker.patch(
         target="openbb_terminal.cryptocurrency.discovery.coinmarketcap_view.export_data"
@@ -32,8 +30,6 @@ def test_display_cmc_top_coins(mocker):
 @pytest.mark.record_stdout
 def test_display_cmc_top_coins_empty_df(mocker):
     view_path = "openbb_terminal.cryptocurrency.discovery.coinmarketcap_view"
-
-    os.environ["API_CMC_KEY"] = "FAKE_API_KEY"
 
     # MOCK GET_SEARCH_RESULTS
     mocker.patch(

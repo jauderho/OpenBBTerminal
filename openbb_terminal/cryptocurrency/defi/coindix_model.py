@@ -4,13 +4,17 @@ __docformat__ = "numpy"
 import logging
 from typing import Optional
 
-import urllib3
 import pandas as pd
-import requests
+import urllib3
 
+from openbb_terminal import rich_config
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.decorators import log_start_end
-from openbb_terminal.helper_funcs import get_user_agent, lambda_long_number_format
-
+from openbb_terminal.helper_funcs import (
+    get_user_agent,
+    lambda_long_number_format,
+    request,
+)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -140,7 +144,7 @@ def get_defi_vaults(
 
     headers = {"User-Agent": get_user_agent()}
     params = _prepare_params(chain=chain, protocol=protocol, kind=kind)
-    response = requests.get(
+    response = request(
         "https://apiv2.coindix.com/search", headers=headers, params=params, verify=False
     )
     if not 200 <= response.status_code < 300:
@@ -156,10 +160,15 @@ def get_defi_vaults(
         raise ValueError(f"Invalid Response: {response.text}") from e
 
     df = df.sort_values(by=sortby, ascending=ascend).fillna("NA")
-    df["tvl"] = df["tvl"].apply(lambda x: lambda_long_number_format(x))
-    df["apy"] = df["apy"].apply(
-        lambda x: f"{str(round(x * 100, 2))} %" if isinstance(x, (int, float)) else x
-    )
+
+    if rich_config.USE_COLOR and not get_current_user().preferences.USE_INTERACTIVE_DF:
+        df["tvl"] = df["tvl"].apply(lambda x: lambda_long_number_format(x))
+        df["apy"] = df["apy"].apply(
+            lambda x: f"{str(round(x * 100, 2))} %"
+            if isinstance(x, (int, float))
+            else x
+        )
+
     df.columns = [x.title() for x in df.columns]
     df.rename(columns={"Apy": "APY (%)", "Tvl": "TVL ($)"}, inplace=True)
     return df

@@ -3,7 +3,7 @@ __docformat__ = "numpy"
 
 import logging
 import os
-from typing import List
+from typing import List, Optional
 
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import export_data, print_rich_table
@@ -14,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def screener(similar: List[str], data_type: str = "overview", export: str = ""):
+def screener(
+    similar: List[str],
+    data_type: str = "overview",
+    export: str = "",
+    sheet_name: Optional[str] = None,
+):
     """Screener.
 
     Parameters
@@ -40,8 +45,13 @@ def screener(similar: List[str], data_type: str = "overview", export: str = ""):
             headers=list(df_screen.columns),
             show_index=False,
             title="Stock Screener",
+            export=bool(export),
         )
 
     export_data(
-        export, os.path.dirname(os.path.abspath(__file__)), data_type, df_screen
+        export,
+        os.path.dirname(os.path.abspath(__file__)),
+        data_type,
+        df_screen,
+        sheet_name,
     )

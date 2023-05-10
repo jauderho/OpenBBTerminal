@@ -1,4 +1,5 @@
 # IMPORTATION STANDARD
+
 import os
 
 # IMPORTATION THIRDPARTY
@@ -6,6 +7,10 @@ import pandas as pd
 import pytest
 
 # IMPORTATION INTERNAL
+from openbb_terminal.core.session.current_user import (
+    PreferencesModel,
+    copy_user,
+)
 from openbb_terminal.etf import etf_controller
 
 # pylint: disable=E1101
@@ -81,9 +86,11 @@ def test_menu_without_queue_completion(mocker):
     path_controller = "openbb_terminal.etf.etf_controller"
 
     # ENABLE AUTO-COMPLETION : HELPER_FUNCS.MENU
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
     mocker.patch(
-        target="openbb_terminal.feature_flags.USE_PROMPT_TOOLKIT",
-        new=True,
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target="openbb_terminal.parent_classes.session",
@@ -94,10 +101,11 @@ def test_menu_without_queue_completion(mocker):
     )
 
     # DISABLE AUTO-COMPLETION : CONTROLLER.COMPLETER
-    mocker.patch.object(
-        target=etf_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=True,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target=f"{path_controller}.session",
@@ -121,10 +129,11 @@ def test_menu_without_queue_sys_exit(mock_input, mocker):
     path_controller = "openbb_terminal.etf.etf_controller"
 
     # DISABLE AUTO-COMPLETION
-    mocker.patch.object(
-        target=etf_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=False,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target=f"{path_controller}.session",
@@ -252,70 +261,74 @@ def test_call_func_expect_queue(expected_queue, func, queue):
             ["--name", "oil", "--source", "FinanceDatabase"],
             "financedatabase_view.display_etf_by_name",
             [],
-            dict(name="oil", limit=5, export=""),
+            dict(
+                name="oil",
+                limit=5,
+                export="",
+                sheet_name=None,
+            ),
         ),
         (
             "call_search",
             ["--name", "oil", "--source", "StockAnalysis"],
             "stockanalysis_view.display_etf_by_name",
             [],
-            dict(name="oil", limit=5, export=""),
+            dict(
+                name="oil",
+                limit=5,
+                export="",
+                sheet_name=None,
+            ),
         ),
         (
             "call_search",
             ["--description", "oil"],
             "financedatabase_view.display_etf_by_description",
             [],
-            dict(description="oil", limit=5, export=""),
+            dict(
+                description="oil",
+                limit=5,
+                export="",
+                sheet_name=None,
+            ),
         ),
         (
             "call_overview",
             [],
             "stockanalysis_view.view_overview",
             [],
-            dict(symbol="MOCK_ETF_NAME", export=""),
+            dict(symbol="MOCK_ETF_NAME", export="", sheet_name=None),
         ),
         (
             "call_holdings",
             ["6"],
             "stockanalysis_view.view_holdings",
             [],
-            dict(symbol="MOCK_ETF_NAME", limit=6, export=""),
+            dict(
+                symbol="MOCK_ETF_NAME",
+                limit=6,
+                export="",
+                sheet_name=None,
+            ),
         ),
         (
             "call_weights",
             ["--raw"],
-            "yfinance_view.display_etf_weightings",
+            "fmp_view.display_etf_weightings",
             [],
-            dict(name="MOCK_ETF_NAME", raw=True, min_pct_to_display=5, export=""),
-        ),
-        (
-            "call_summary",
-            [],
-            "yfinance_view.display_etf_description",
-            [],
-            dict(name="MOCK_ETF_NAME"),
-        ),
-        (
-            "call_pir",
-            ["ARKW,ARKF", "--filename=hello.xlsx", "--folder=world"],
-            "create_ETF_report",
-            [["ARKW", "ARKF"]],
-            dict(filename="hello.xlsx", folder="world"),
-        ),
-        (
-            "call_pir",
-            ["--filename=hello.xlsx", "--folder=world"],
-            "create_ETF_report",
-            [["MOCK_ETF_NAME"]],
-            dict(filename="hello.xlsx", folder="world"),
+            dict(
+                name="MOCK_ETF_NAME",
+                raw=True,
+                export="",
+                sheet_name=None,
+            ),
         ),
         (
             "call_compare",
             ["--etfs=ARKW,ARKF"],
             "stockanalysis_view.view_comparisons",
             [["ARKW", "ARKF"]],
-            dict(export=""),
+            dict(export="", sheet_name=None),
         ),
         (
             "call_ca",
@@ -342,13 +355,6 @@ def test_call_func_expect_queue(expected_queue, func, queue):
             [],
             "ETFController.load_class",
             [etf_controller.disc_controller.DiscoveryController, []],
-            dict(),
-        ),
-        (
-            "call_scr",
-            [],
-            "ETFController.load_class",
-            [etf_controller.screener_controller.ScreenerController, []],
             dict(),
         ),
     ],

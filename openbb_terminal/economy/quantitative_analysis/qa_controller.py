@@ -3,26 +3,25 @@ __docformat__ = "numpy"
 
 import argparse
 import logging
-from typing import List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from openbb_terminal.custom_prompt_toolkit import NestedCompleter
-
-from openbb_terminal import feature_flags as obbff
 from openbb_terminal.common.quantitative_analysis import qa_view, rolling_view
+from openbb_terminal.core.session.current_user import get_current_user
+from openbb_terminal.custom_prompt_toolkit import NestedCompleter
 from openbb_terminal.decorators import log_start_end
 from openbb_terminal.helper_funcs import (
     EXPORT_ONLY_FIGURES_ALLOWED,
     EXPORT_ONLY_RAW_DATA_ALLOWED,
+    check_list_dates,
     check_positive,
     check_proportion_range,
-    check_list_dates,
 )
 from openbb_terminal.menu import session
 from openbb_terminal.parent_classes import StockBaseController
-from openbb_terminal.rich_config import console, MenuText
+from openbb_terminal.rich_config import MenuText, console
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ class QaController(StockBaseController):
     def __init__(
         self,
         all_economy_data: Dict,
-        queue: List[str] = None,
+        queue: Optional[List[str]] = None,
     ):
         """Constructor"""
         super().__init__(queue)
@@ -83,7 +82,7 @@ class QaController(StockBaseController):
         self.start_date = self.data.index[0]
         self.resolution = ""  # For the views
 
-        if session and obbff.USE_PROMPT_TOOLKIT:
+        if session and get_current_user().preferences.USE_PROMPT_TOOLKIT:
             choices: dict = {c: {} for c in self.controller_choices}
             choices["pick"] = {c: {} for c in self.options}
             choices["unitroot"] = {
@@ -268,10 +267,7 @@ class QaController(StockBaseController):
         ns_parser = self.parse_known_args_and_warn(
             parser, other_args, export_allowed=EXPORT_ONLY_RAW_DATA_ALLOWED
         )
-        if isinstance(self.data, pd.Series):
-            data = self.data.to_frame()
-        else:
-            data = self.data
+        data = self.data.to_frame() if isinstance(self.data, pd.Series) else self.data
         if ns_parser:
             qa_view.display_raw(
                 data=data,
@@ -279,6 +275,9 @@ class QaController(StockBaseController):
                 sortby=ns_parser.sortby,
                 ascend=ns_parser.reverse,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -297,7 +296,11 @@ class QaController(StockBaseController):
         )
         if ns_parser:
             qa_view.display_summary(
-                data=self.current_source_dataframe, export=ns_parser.export
+                data=self.current_source_dataframe,
+                export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -341,6 +344,7 @@ class QaController(StockBaseController):
                 log_y=ns_parser.log,
                 markers_lines=ns_parser.ml,
                 markers_scatter=ns_parser.ms,
+                export=ns_parser.export,
             )
 
     @log_start_end(log=logger)
@@ -386,6 +390,9 @@ class QaController(StockBaseController):
                 data=self.current_source_dataframe,
                 target=self.current_id,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -447,6 +454,9 @@ class QaController(StockBaseController):
                 target=self.current_id,
                 multiplicative=ns_parser.multiplicative,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -506,7 +516,6 @@ class QaController(StockBaseController):
         )
         ns_parser = self.parse_known_args_and_warn(parser, other_args)
         if ns_parser:
-
             qa_view.display_acf(
                 symbol="",
                 data=self.current_source_dataframe,
@@ -544,6 +553,9 @@ class QaController(StockBaseController):
                 target=self.current_id,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -575,6 +587,9 @@ class QaController(StockBaseController):
                 target=self.current_id,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -624,6 +639,9 @@ class QaController(StockBaseController):
                 window=ns_parser.n_window,
                 quantile=ns_parser.f_quantile,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -661,6 +679,9 @@ class QaController(StockBaseController):
                 target=self.current_id,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -698,6 +719,9 @@ class QaController(StockBaseController):
                 target=self.current_id,
                 window=ns_parser.n_window,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -719,6 +743,9 @@ class QaController(StockBaseController):
                 data=self.current_source_dataframe,
                 target=self.current_id,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )
 
     @log_start_end(log=logger)
@@ -777,4 +804,7 @@ class QaController(StockBaseController):
                 fuller_reg=ns_parser.fuller_reg,
                 kpss_reg=ns_parser.kpss_reg,
                 export=ns_parser.export,
+                sheet_name=" ".join(ns_parser.sheet_name)
+                if ns_parser.sheet_name
+                else None,
             )

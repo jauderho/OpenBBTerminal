@@ -1,4 +1,5 @@
 # IMPORTATION STANDARD
+
 import os
 from datetime import datetime
 
@@ -7,6 +8,10 @@ import pandas as pd
 import pytest
 
 # IMPORTATION INTERNAL
+from openbb_terminal.core.session.current_user import (
+    PreferencesModel,
+    copy_user,
+)
 from openbb_terminal.etf.technical_analysis import ta_controller
 
 # pylint: disable=E1101
@@ -53,9 +58,11 @@ def test_menu_without_queue_completion(mocker):
     path_controller = "openbb_terminal.etf.technical_analysis.ta_controller"
 
     # ENABLE AUTO-COMPLETION : HELPER_FUNCS.MENU
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
     mocker.patch(
-        target="openbb_terminal.feature_flags.USE_PROMPT_TOOLKIT",
-        new=True,
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target="openbb_terminal.parent_classes.session",
@@ -68,10 +75,11 @@ def test_menu_without_queue_completion(mocker):
     # DISABLE AUTO-COMPLETION : CONTROLLER.COMPLETER
 
     # DISABLE AUTO-COMPLETION
-    mocker.patch.object(
-        target=ta_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=True,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target=f"{path_controller}.session",
@@ -100,10 +108,11 @@ def test_menu_without_queue_sys_exit(mock_input, mocker):
     path_controller = "openbb_terminal.etf.technical_analysis.ta_controller"
 
     # DISABLE AUTO-COMPLETION
-    mocker.patch.object(
-        target=ta_controller.obbff,
-        attribute="USE_PROMPT_TOOLKIT",
-        new=False,
+    preferences = PreferencesModel(USE_PROMPT_TOOLKIT=True)
+    mock_current_user = copy_user(preferences=preferences)
+    mocker.patch(
+        target="openbb_terminal.core.session.current_user.__current_user",
+        new=mock_current_user,
     )
     mocker.patch(
         target=f"{path_controller}.session",
@@ -288,6 +297,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=[1, 2],
                 offset=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -306,6 +316,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=[1, 2],
                 offset=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -324,6 +335,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=[1, 2],
                 offset=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -342,6 +354,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=[1, 2],
                 offset=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -360,6 +373,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=[1, 2],
                 offset=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -377,6 +391,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=1,
                 scalar=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -396,6 +411,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 n_slow=2,
                 n_signal=3,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -415,6 +431,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 scalar=2,
                 drift=3,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -434,6 +451,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 slowdperiod=2,
                 slowkperiod=3,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -449,6 +467,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 data=MOCK_STOCK_DF,
                 window=1,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -464,6 +483,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 data=MOCK_STOCK_DF["Adj Close"],
                 window=1,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -483,6 +503,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 scalar=2,
                 drift=3,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -500,6 +521,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 window=1,
                 scalar=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -519,6 +541,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 n_std=2,
                 mamode="ema",
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -536,6 +559,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 upper_length=1,
                 lower_length=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -557,6 +581,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 mamode="sma",
                 offset=3,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -572,6 +597,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 data=MOCK_STOCK_DF,
                 use_open=True,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -591,6 +617,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 fast=1,
                 slow=2,
                 export="csv",
+                sheet_name=None,
             ),
         ),
         (
@@ -601,9 +628,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
             "volume_view.display_obv",
             [],
             dict(
-                symbol="MOCK_TICKER",
-                data=MOCK_STOCK_DF,
-                export="csv",
+                symbol="MOCK_TICKER", data=MOCK_STOCK_DF, export="csv", sheet_name=None
             ),
         ),
         (
@@ -623,6 +648,7 @@ def test_call_func_expect_queue(expected_queue, func, queue):
                 start_date=datetime.strptime("2021-12-01", "%Y-%m-%d"),
                 end_date=datetime.strptime("2021-12-02", "%Y-%m-%d"),
                 export="csv",
+                sheet_name=None,
             ),
         ),
     ],

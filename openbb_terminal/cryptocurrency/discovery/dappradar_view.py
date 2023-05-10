@@ -3,6 +3,8 @@ __docformat__ = "numpy"
 
 import logging
 import os
+from typing import Optional
+
 import numpy as np
 
 from openbb_terminal.cryptocurrency.dataframe_helpers import (
@@ -17,7 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 @log_start_end(log=logger)
-def display_top_nfts(limit: int = 10, sortby: str = "", export: str = "") -> None:
+def display_top_nfts(
+    limit: int = 10,
+    sortby: str = "",
+    export: str = "",
+    sheet_name: Optional[str] = None,
+) -> None:
     """Prints table showing top nft collections [Source: https://dappradar.com/]
 
     Parameters
@@ -32,7 +39,7 @@ def display_top_nfts(limit: int = 10, sortby: str = "", export: str = "") -> Non
 
     df = dappradar_model.get_top_nfts(sortby, limit)
     if df.empty:
-        console.print("[red]Failed to fetch data from DappRadar[/red]\n")
+        console.print("[red]Failed to fetch data from DappRadar[/red]")
         return
     for col in ["Floor Price [$]", "Avg Price [$]", "Market Cap [$]", "Volume [$]"]:
         if col in df.columns:
@@ -47,6 +54,7 @@ def display_top_nfts(limit: int = 10, sortby: str = "", export: str = "") -> Non
         headers=list(df.columns),
         show_index=False,
         title="Top NFT collections",
+        export=bool(export),
     )
 
     export_data(
@@ -54,11 +62,17 @@ def display_top_nfts(limit: int = 10, sortby: str = "", export: str = "") -> Non
         os.path.dirname(os.path.abspath(__file__)),
         "drnft",
         df,
+        sheet_name,
     )
 
 
 @log_start_end(log=logger)
-def display_top_games(limit: int = 10, export: str = "", sortby: str = "") -> None:
+def display_top_games(
+    limit: int = 10,
+    export: str = "",
+    sheet_name: Optional[str] = None,
+    sortby: str = "",
+) -> None:
     """Prints table showing top blockchain games [Source: https://dappradar.com/]
 
     Parameters
@@ -73,7 +87,7 @@ def display_top_games(limit: int = 10, export: str = "", sortby: str = "") -> No
 
     df = dappradar_model.get_top_games(sortby, limit)
     if df.empty:
-        console.print("[red]Failed to fetch data from DappRadar[/red]\n")
+        console.print("[red]Failed to fetch data from DappRadar[/red]")
         return
     for col in ["Daily Users", "Daily Volume [$]"]:
         if col in df.columns:
@@ -83,6 +97,7 @@ def display_top_games(limit: int = 10, export: str = "", sortby: str = "") -> No
         headers=list(df.columns),
         show_index=False,
         title="Top Blockchain Games",
+        export=bool(export),
     )
 
     export_data(
@@ -90,11 +105,17 @@ def display_top_games(limit: int = 10, export: str = "", sortby: str = "") -> No
         os.path.dirname(os.path.abspath(__file__)),
         "drgames",
         df,
+        sheet_name,
     )
 
 
 @log_start_end(log=logger)
-def display_top_dexes(limit: int = 10, export: str = "", sortby: str = "") -> None:
+def display_top_dexes(
+    limit: int = 10,
+    export: str = "",
+    sheet_name: Optional[str] = None,
+    sortby: str = "",
+) -> None:
     """Prints table showing top decentralized exchanges [Source: https://dappradar.com/]
 
     Parameters
@@ -109,7 +130,7 @@ def display_top_dexes(limit: int = 10, export: str = "", sortby: str = "") -> No
 
     df = dappradar_model.get_top_dexes(sortby, limit)
     if df.empty:
-        console.print("[red]Failed to fetch data from DappRadar[/red]\n")
+        console.print("[red]Failed to fetch data from DappRadar[/red]")
         return
     for col in ["Daily Users", "Daily Volume [$]"]:
         if col in df.columns:
@@ -119,6 +140,7 @@ def display_top_dexes(limit: int = 10, export: str = "", sortby: str = "") -> No
         headers=list(df.columns),
         show_index=False,
         title="Top Decentralized Exchanges",
+        export=bool(export),
     )
 
     export_data(
@@ -126,11 +148,17 @@ def display_top_dexes(limit: int = 10, export: str = "", sortby: str = "") -> No
         os.path.dirname(os.path.abspath(__file__)),
         "drdex",
         df,
+        sheet_name,
     )
 
 
 @log_start_end(log=logger)
-def display_top_dapps(limit: int = 10, export: str = "", sortby: str = "") -> None:
+def display_top_dapps(
+    limit: int = 10,
+    export: str = "",
+    sheet_name: Optional[str] = None,
+    sortby: str = "",
+) -> None:
     """Prints table showing top decentralized exchanges [Source: https://dappradar.com/]
 
     Parameters
@@ -145,7 +173,7 @@ def display_top_dapps(limit: int = 10, export: str = "", sortby: str = "") -> No
 
     df = dappradar_model.get_top_dapps(sortby, limit)
     if df.empty:
-        console.print("[red]Failed to fetch data from DappRadar[/red]\n")
+        console.print("[red]Failed to fetch data from DappRadar[/red]")
         return
     for col in ["Daily Users", "Daily Volume [$]"]:
         if col in df.columns:
@@ -155,6 +183,7 @@ def display_top_dapps(limit: int = 10, export: str = "", sortby: str = "") -> No
         headers=list(df.columns),
         show_index=False,
         title="Top Decentralized Applications",
+        export=bool(export),
     )
 
     export_data(
@@ -162,4 +191,5 @@ def display_top_dapps(limit: int = 10, export: str = "", sortby: str = "") -> No
         os.path.dirname(os.path.abspath(__file__)),
         "drdapps",
         df,
+        sheet_name,
     )

@@ -2,15 +2,15 @@ import configparser
 import logging
 import textwrap
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
-import requests
 from bs4 import BeautifulSoup
 
-from openbb_terminal.core.config.paths import USER_PRESETS_DIRECTORY
+from openbb_terminal.core.config.paths import MISCELLANEOUS_DIRECTORY
+from openbb_terminal.core.session.current_user import get_current_user
 from openbb_terminal.decorators import log_start_end
+from openbb_terminal.helper_funcs import request
 from openbb_terminal.rich_config import console
 
 logger = logging.getLogger(__name__)
@@ -1109,20 +1109,30 @@ def get_preset_choices() -> Dict:
     filepath as value
     """
 
-    PRESETS_PATH = USER_PRESETS_DIRECTORY / "stocks" / "insider"
-    PRESETS_PATH_DEFAULT = Path(__file__).parent / "presets"
-    preset_choices = {
-        filepath.name.strip(".ini"): filepath
-        for filepath in PRESETS_PATH.iterdir()
-        if filepath.suffix == ".ini"
-    }
-    preset_choices.update(
-        {
-            filepath.name.strip(".ini"): filepath
-            for filepath in PRESETS_PATH_DEFAULT.iterdir()
-            if filepath.suffix == ".ini"
-        }
+    PRESETS_PATH = (
+        get_current_user().preferences.USER_PRESETS_DIRECTORY / "stocks" / "insider"
     )
+    PRESETS_PATH_DEFAULT = MISCELLANEOUS_DIRECTORY / "stocks" / "insider"
+
+    preset_choices = {}
+
+    if PRESETS_PATH.exists():
+        preset_choices.update(
+            {
+                filepath.name.strip(".ini"): filepath
+                for filepath in PRESETS_PATH.iterdir()
+                if filepath.suffix == ".ini"
+            }
+        )
+
+    if PRESETS_PATH_DEFAULT.exists():
+        preset_choices.update(
+            {
+                filepath.name.strip(".ini"): filepath
+                for filepath in PRESETS_PATH_DEFAULT.iterdir()
+                if filepath.suffix == ".ini"
+            }
+        )
 
     return preset_choices
 
@@ -1316,7 +1326,7 @@ def get_open_insider_data(url: str, has_company_name: bool) -> pd.DataFrame:
     data : pd.DataFrame
         open insider filtered data
     """
-    text_soup_open_insider = BeautifulSoup(requests.get(url).text, "lxml")
+    text_soup_open_insider = BeautifulSoup(request(url).text, "lxml")
 
     if len(text_soup_open_insider.find_all("tbody")) == 0:
         console.print("No insider trading found.")
@@ -1447,17 +1457,23 @@ def get_print_insider_data(type_insider: str = "lcb"):
     data : pd.DataFrame
         Open insider filtered data
     """
-    response = requests.get(
+    response = request(
         f"http://openinsider.com/{d_open_insider[type_insider]}",
         headers={"User-Agent": "Mozilla/5.0"},
     )
-    df = (
-        pd.read_html(response.text)[-3]
-        .drop(columns=["1d", "1w", "1m", "6m"])
-        .fillna("-")
-    )
+
+    df = pd.read_html(response.text)[-3]
+    remove_cols = ["1d", "1w", "1m", "6m"]
+
+    if set(remove_cols).issubset(set(df.columns)):
+        df = df.drop(columns=remove_cols).fillna("-")
+    else:
+        console.print("No data found for the given insider type.", style="red")
+        df = pd.DataFrame()
+
     if df.empty:
         return pd.DataFrame()
+
     columns = [
         "X",
         "Filing Date",
