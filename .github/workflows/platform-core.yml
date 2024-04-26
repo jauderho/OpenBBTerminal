@@ -33,7 +33,7 @@ jobs:
             cache: "pip"
 
       - name: Cache pip packages
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('openbb_platform/poetry.lock') }}
