@@ -65,12 +65,36 @@ def test_economy_calendar(params, obb):
     [
         (
             {
+                "country": "spain",
+                "transform": "yoy",
+                "frequency": "annual",
+                "harmonized": False,
+                "start_date": "2020-01-01",
+                "end_date": "2023-06-06",
+                "provider": "fred",
+            }
+        ),
+        (
+            {
                 "country": "portugal,spain",
-                "units": "growth_same",
+                "transform": "period",
                 "frequency": "monthly",
                 "harmonized": True,
                 "start_date": "2023-01-01",
                 "end_date": "2023-06-06",
+                "provider": "fred",
+            }
+        ),
+        (
+            {
+                "country": "portugal,spain",
+                "transform": "yoy",
+                "frequency": "quarter",
+                "harmonized": False,
+                "start_date": "2020-01-01",
+                "end_date": "2023-06-06",
+                "provider": "oecd",
+                "expenditure": "transport",
             }
         ),
     ],
@@ -603,6 +627,69 @@ def test_economy_indicators(params, obb):
     params = {p: v for p, v in params.items() if v}
 
     result = obb.economy.indicators(**params)
+    assert result
+    assert isinstance(result, OBBject)
+    assert len(result.results) > 0
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "date": None,
+                "provider": "federal_reserve",
+                "holding_type": "all_treasury",
+                "summary": False,
+                "monthly": False,
+                "cusip": None,
+                "wam": False,
+            }
+        ),
+        (
+            {
+                "date": None,
+                "provider": "federal_reserve",
+                "holding_type": "all_agency",
+                "summary": False,
+                "monthly": False,
+                "cusip": None,
+                "wam": True,
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_economy_central_bank_holdings(params, obb):
+    """Test economy central bank holdings."""
+    params = {p: v for p, v in params.items() if v}
+
+    result = obb.economy.central_bank_holdings(**params)
+    assert result
+    assert isinstance(result, OBBject)
+    assert len(result.results) > 0
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "country": "united_states,united_kingdom",
+                "frequency": "monthly",
+                "provider": "oecd",
+                "start_date": "2022-01-01",
+                "end_date": "2024-04-01",
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_economy_share_price_index(params, obb):
+    """Test economy share price index."""
+    params = {p: v for p, v in params.items() if v}
+
+    result = obb.economy.share_price_index(**params)
     assert result
     assert isinstance(result, OBBject)
     assert len(result.results) > 0
