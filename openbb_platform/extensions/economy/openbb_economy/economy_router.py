@@ -411,6 +411,29 @@ async def available_indicators(
             description="Use the `main` symbol to get the group of main indicators for a country.",
             parameters={"provider": "econdb", "symbol": "main", "country": "eu"},
         ),
+        APIEx(
+            description="When the provider is 'imf', the absence of a symbol will default to 'irfcl_top_lines'."
+            + " Use 'IRFCL' to get all the data from the set of indicators.",
+            parameters={"provider": "imf"},
+        ),
+        APIEx(
+            description="When the provider is 'imf', complete tables are returned by using a 'preset'."
+            + " Refer to the function's docstring for descriptions of each preset."
+            + " When no country is supplied, the data is returned for all countries.",
+            parameters={"provider": "imf", "symbol": "gold_reserves"},
+        ),
+        APIEx(
+            description="When the provider is 'imf', multiple countries and symbols can be supplied."
+            + " Enter countries as a two-letter ISO country code, or the country name in lower_snake_case.",
+            parameters={
+                "provider": "imf",
+                "symbol": "RAFA_USD,RAPFA_USD,RAFA_RAPFA_RO",
+                "country": "us,china,jp,4f,gb",
+                "start_date": "2010-01-01",
+                "end_date": "2020-12-31",
+                "frequency": "annual",
+            },
+        ),
     ],
 )
 async def indicators(
@@ -695,4 +718,20 @@ async def primary_dealer_fails(
     Near-100 percent pass-through of fails suggests a high degree of collateral
     re-hypothecation together with the inability or unwillingness to borrow or buy the needed securities."
     """
+    return await OBBject.from_query(Query(**locals()))
+
+
+@router.command(
+    model="PortVolume",
+    examples=[
+        APIEx(parameters={"provider": "econdb"}),
+    ],
+)
+async def port_volume(
+    cc: CommandContext,
+    provider_choices: ProviderChoices,
+    standard_params: StandardParams,
+    extra_params: ExtraParams,
+) -> OBBject:
+    """Get average dwelling times and TEU volumes from the top ports."""
     return await OBBject.from_query(Query(**locals()))

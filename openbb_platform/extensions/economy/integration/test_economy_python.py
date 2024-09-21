@@ -629,6 +629,26 @@ def test_economy_available_indicators(params, obb):
                 "frequency": "quarter",
             }
         ),
+        (
+            {
+                "provider": "imf",
+                "country": "us,uk,jp",
+                "symbol": "gold_reserves",
+                "start_date": "2022-01-01",
+                "end_date": "2023-12-31",
+                "frequency": "annual",
+            }
+        ),
+        (
+            {
+                "provider": "imf",
+                "country": "all",
+                "symbol": "derivative_assets",
+                "start_date": "2022-01-01",
+                "end_date": "2023-12-31",
+                "frequency": "annual",
+            }
+        ),
     ],
 )
 @pytest.mark.integration
@@ -1109,6 +1129,29 @@ def test_economy_primary_dealer_fails(params, obb):
     params = {p: v for p, v in params.items() if v}
 
     result = obb.economy.primary_dealer_fails(**params)
+    assert result
+    assert isinstance(result, OBBject)
+    assert len(result.results) > 0
+
+
+@parametrize(
+    "params",
+    [
+        (
+            {
+                "provider": "econdb",
+                "start_date": None,
+                "end_date": None,
+            }
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_economy_port_volume(params, obb):
+    """Test the economy port volume endpoint"""
+    params = {p: v for p, v in params.items() if v}
+
+    result = obb.economy.port_volume(**params)
     assert result
     assert isinstance(result, OBBject)
     assert len(result.results) > 0
