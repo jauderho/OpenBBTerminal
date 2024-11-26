@@ -579,6 +579,16 @@ def test_equity_fundamental_income_growth(params, headers):
                 "sort_by": "updated_on",
             }
         ),
+        (
+            {
+                "provider": "sec",
+                "symbol": "AAPL",
+                "limit": 10,
+                "start_date": "2024-06-30",
+                "end_date": "2024-09-30",
+                "use_cache": True,
+            }
+        ),
     ],
 )
 @pytest.mark.integration
@@ -1472,6 +1482,24 @@ def test_equity_search(params, headers):
                 "recommendation": "all",
                 "limit": None,
                 "provider": "finviz",
+            }
+        ),
+        (
+            {
+                "country": "us",
+                "sector": "consumer_cyclical",
+                "industry": "auto_manufacturers",
+                "exchange": None,
+                "mktcap_min": 60000000000,
+                "mktcap_max": None,
+                "price_min": 10,
+                "price_max": None,
+                "volume_min": 5000000,
+                "volume_max": None,
+                "beta_min": None,
+                "beta_max": None,
+                "provider": "yfinance",
+                "limit": 200,
             }
         ),
     ],
